@@ -1,0 +1,248 @@
+version: "4.1"
+name: Car_v1
+type: ARM
+deviceName: STM32F100C8
+packDir: .pack/Keil/STM32F1xx_DFP.2.4.1
+srcDirs: []
+virtualFolder:
+  name: <virtual_root>
+  files:
+    - path: HARDWARE/_MyI2C_.c
+    - path: HARDWARE/filter.c
+    - path: HARDWARE/generic.c
+    - path: HARDWARE/Keys.c
+    - path: HARDWARE/Motors.c
+    - path: HARDWARE/MPU6050.c
+    - path: HARDWARE/OLED.c
+    - path: HARDWARE/PWMO.c
+    - path: HARDWARE/Rotary_encoder.c
+    - path: HARDWARE/USART.c
+    - path: main.c
+    - path: ../Test1/LIBS/misc.c
+    - path: ../Test1/LIBS/misc.h
+    - path: ../Test1/LIBS/stm32f10x_adc.c
+    - path: ../Test1/LIBS/stm32f10x_adc.h
+    - path: ../Test1/LIBS/stm32f10x_bkp.c
+    - path: ../Test1/LIBS/stm32f10x_bkp.h
+    - path: ../Test1/LIBS/stm32f10x_can.c
+    - path: ../Test1/LIBS/stm32f10x_can.h
+    - path: ../Test1/LIBS/stm32f10x_cec.c
+    - path: ../Test1/LIBS/stm32f10x_cec.h
+    - path: ../Test1/LIBS/stm32f10x_crc.c
+    - path: ../Test1/LIBS/stm32f10x_crc.h
+    - path: ../Test1/LIBS/stm32f10x_dac.c
+    - path: ../Test1/LIBS/stm32f10x_dac.h
+    - path: ../Test1/LIBS/stm32f10x_dbgmcu.c
+    - path: ../Test1/LIBS/stm32f10x_dbgmcu.h
+    - path: ../Test1/LIBS/stm32f10x_dma.c
+    - path: ../Test1/LIBS/stm32f10x_dma.h
+    - path: ../Test1/LIBS/stm32f10x_exti.c
+    - path: ../Test1/LIBS/stm32f10x_exti.h
+    - path: ../Test1/LIBS/stm32f10x_flash.c
+    - path: ../Test1/LIBS/stm32f10x_flash.h
+    - path: ../Test1/LIBS/stm32f10x_fsmc.c
+    - path: ../Test1/LIBS/stm32f10x_fsmc.h
+    - path: ../Test1/LIBS/stm32f10x_gpio.c
+    - path: ../Test1/LIBS/stm32f10x_gpio.h
+    - path: ../Test1/LIBS/stm32f10x_i2c.c
+    - path: ../Test1/LIBS/stm32f10x_i2c.h
+    - path: ../Test1/LIBS/stm32f10x_iwdg.c
+    - path: ../Test1/LIBS/stm32f10x_iwdg.h
+    - path: ../Test1/LIBS/stm32f10x_pwr.c
+    - path: ../Test1/LIBS/stm32f10x_pwr.h
+    - path: ../Test1/LIBS/stm32f10x_rcc.c
+    - path: ../Test1/LIBS/stm32f10x_rcc.h
+    - path: ../Test1/LIBS/stm32f10x_rtc.c
+    - path: ../Test1/LIBS/stm32f10x_rtc.h
+    - path: ../Test1/LIBS/stm32f10x_sdio.c
+    - path: ../Test1/LIBS/stm32f10x_sdio.h
+    - path: ../Test1/LIBS/stm32f10x_spi.c
+    - path: ../Test1/LIBS/stm32f10x_spi.h
+    - path: ../Test1/LIBS/stm32f10x_tim.c
+    - path: ../Test1/LIBS/stm32f10x_tim.h
+    - path: ../Test1/LIBS/stm32f10x_usart.c
+    - path: ../Test1/LIBS/stm32f10x_usart.h
+    - path: ../Test1/LIBS/stm32f10x_wwdg.c
+    - path: ../Test1/LIBS/stm32f10x_wwdg.h
+    - path: ../Test1/SYSTEM/Timers.c
+    - path: HARDWARE/LED.c
+    - path: HARDWARE/LED.h
+  folders:
+    - name: libs
+      files:
+        - path: ../Test1/START/core_cm3.c
+        - path: ../Test1/START/core_cm3.h
+        - path: ../Test1/START/stm32f10x.h
+        - path: ../Test1/START/system_stm32f10x.c
+        - path: ../Test1/START/system_stm32f10x.h
+        - path: ../Test1/USER/stm32f10x_conf.h
+        - path: ../Test1/USER/stm32f10x_it.c
+        - path: ../Test1/USER/stm32f10x_it.h
+        - path: ../Test1/START/startup_stm32f10x_md.s
+      folders: []
+dependenceList: []
+outDir: build
+miscInfo:
+  uid: db8847d50303be714fdef640204a374e
+targets:
+  Debug:
+    cppPreprocessAttrs:
+      defineList:
+        - STM32F10X_MD
+        - USE_STDPERIPH_DRIVER
+      incList:
+        - .
+        - HARDWARE
+        - Core
+        - ../Test1/START
+        - ../Test1/SYSTEM
+        - ../Test1/LIBS
+        - ../Test1/USER
+      libList: []
+    excludeList: []
+    settings:
+      debugger: cortex-debug
+    toolchain: AC5
+    toolchainConfigMap:
+      AC5:
+        archExtensions: ""
+        cpuType: Cortex-M3
+        floatingPointHardware: none
+        options:
+          version: 4
+          afterBuildTasks: []
+          asm-compiler: {}
+          beforeBuildTasks: []
+          c/cpp-compiler:
+            CXX_FLAGS: --diag_suppress=1 --diag_suppress=1295
+            C_FLAGS: --diag_suppress=1 --diag_suppress=1295
+            c99-mode: true
+            one-elf-section-per-function: true
+            optimization: level-0
+          global:
+            output-debug-info: enable
+            use-microLIB: false
+          linker:
+            $outputTaskExcludes:
+              - .bin
+            output-format: elf
+        scatterFilePath: <YOUR_SCATTER_FILE>.sct
+        storageLayout:
+          RAM:
+            - id: 1
+              isChecked: true
+              mem:
+                size: "0x5000"
+                startAddr: "0x20000000"
+              noInit: false
+              tag: IRAM
+          ROM:
+            - id: 1
+              isChecked: true
+              isStartup: true
+              mem:
+                size: "0x10000"
+                startAddr: "0x08000000"
+              tag: IROM
+        useCustomScatterFile: false
+      AC6:
+        archExtensions: ""
+        cpuType: Cortex-M3
+        floatingPointHardware: none
+        options:
+          version: 3
+          afterBuildTasks: []
+          asm-compiler:
+            $use: asm-auto
+            misc-controls: ""
+          beforeBuildTasks: []
+          c/cpp-compiler:
+            language-c: c99
+            language-cpp: c++11
+            link-time-optimization: false
+            optimization: level-0
+          global:
+            output-debug-info: enable
+            use-microLIB: false
+          linker:
+            $outputTaskExcludes:
+              - .bin
+            misc-controls: --diag_suppress=L6329
+            output-format: elf
+        scatterFilePath: <YOUR_SCATTER_FILE>.sct
+        storageLayout:
+          RAM:
+            - id: 1
+              isChecked: true
+              mem:
+                size: "0x5000"
+                startAddr: "0x20000000"
+              noInit: false
+              tag: IRAM
+          ROM:
+            - id: 1
+              isChecked: true
+              isStartup: true
+              mem:
+                size: "0x10000"
+                startAddr: "0x08000000"
+              tag: IROM
+        useCustomScatterFile: false
+      GCC:
+        archExtensions: ""
+        cpuType: Cortex-M3
+        floatingPointHardware: none
+        options:
+          version: 5
+          afterBuildTasks: []
+          asm-compiler:
+            ASM_FLAGS: ""
+          beforeBuildTasks: []
+          c/cpp-compiler:
+            CXX_FLAGS: ""
+            C_FLAGS: ""
+            language-c: c11
+            language-cpp: c++11
+            one-elf-section-per-data: true
+            one-elf-section-per-function: true
+            optimization: level-debug
+            warnings: all-warnings
+          global:
+            $float-abi-type: hard
+            misc-control: ""
+            not-use-syscalls: true
+            output-debug-info: enable
+            use-newlib-nano: true
+          linker:
+            $outputTaskExcludes:
+              - .bin
+            LD_FLAGS: ""
+            LIB_FLAGS: -lm
+            output-format: elf
+            remove-unused-input-sections: true
+        scatterFilePath: <YOUR_LINKER_SCRIPT>.lds
+        storageLayout:
+          RAM: []
+          ROM: []
+        useCustomScatterFile: true
+    uploadConfigMap:
+      JLink:
+        baseAddr: ""
+        bin: ""
+        cpuInfo:
+          cpuName: "null"
+          vendor: "null"
+        otherCmds: ""
+        proType: 1
+        speed: 8000
+      STLink:
+        address: "0x08000000"
+        bin: ""
+        elFile: None
+        optionBytes: .eide/debug.st.option.bytes.ini
+        otherCmds: ""
+        proType: SWD
+        resetMode: default
+        runAfterProgram: true
+        speed: 4000
+    uploader: STLink

@@ -1,0 +1,38 @@
+{
+  "configurations": [
+    {
+      "name": "Keil STM32",
+      "intelliSenseMode": "gcc-arm",
+      "compilerPath": "arm-none-eabi-gcc",
+      "cStandard": "c11",
+      "cppStandard": "c++17",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/HARDWARE",
+        "${workspaceFolder}/DMP",
+        "${workspaceFolder}/Core",
+        "${workspaceFolder}/.pack/Keil/STM32F1xx_DFP.2.4.1/Device/Include",
+        "${workspaceFolder}/../Test1/LIBS",
+        "${workspaceFolder}/../Test1/START",
+        "${workspaceFolder}/../Test1/USER",
+        "${workspaceFolder}/../Test1/SYSTEM"
+      ],
+      "defines": [
+        "USE_STDPERIPH_DRIVER",
+        "STM32F10X_MD",
+        "__CORTEX_M3"
+      ],
+      "browse": {
+        "path": [
+          "${workspaceFolder}/**",
+          "${workspaceFolder}/.pack/Keil/STM32F1xx_DFP.2.4.1/Device/Include",
+          "${workspaceFolder}/../Test1/LIBS",
+          "${workspaceFolder}/../Test1/START",
+          "${workspaceFolder}/../Test1/USER",
+          "${workspaceFolder}/../Test1/SYSTEM"
+        ]
+      }
+    }
+  ],
+  "version": 4
+}
