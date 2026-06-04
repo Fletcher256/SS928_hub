@@ -69,20 +69,452 @@ KalmanFilter Kal_Yaw;
 KalmanFilter Kal_Roll;
 KalmanFilter Kal_Pitch;
 
+volatile uint8_t TelemetryReady = 0;
+volatile uint32_t ControlTicks = 0;
+
+#define REMOTE_TIMEOUT_MS       2000U
+#define DISTANCE_TIMEOUT_MS     30000U
+#define TURN_TIMEOUT_MS         8000U
+#define AUTO_DEFAULT_SPEED      2U
+#define AUTO_FORWARD1_CM        100.0f
+#define AUTO_FORWARD2_CM        60.0f
+#define AUTO_TURN_DEG           90.0f
+#define DISTANCE_DONE_CM        2.0f
+#define TURN_DONE_DEG           3.0f
+#define TURN_SERVO_MAX_OFFSET   35.0f
+#define TURN_SERVO_KP           0.75f
+
+typedef enum ControlMode
+{
+	CTRL_IDLE = 0,
+	CTRL_MANUAL,
+	CTRL_STRAIGHT,
+	CTRL_DISTANCE,
+	CTRL_TURN_YAW,
+	CTRL_AUTO_ROUTE
+} ControlMode_t;
+
+typedef enum AutoStep
+{
+	AUTO_IDLE = 0,
+	AUTO_FORWARD1,
+	AUTO_TURN1,
+	AUTO_FORWARD2
+} AutoStep_t;
+
+static ControlMode_t ControlMode = CTRL_IDLE;
+static AutoStep_t AutoStep = AUTO_IDLE;
+static uint32_t LastCommandTick = 0;
+static uint32_t ActionStartTick = 0;
+static float TargetDistanceCm = 0.0f;
+static float TargetYaw = 0.0f;
+static uint8_t AutoSpeedLevel = AUTO_DEFAULT_SPEED;
+
+void ExDirect(uint8_t Rot);
+void SetSpeedRank(int8_t level);
+void Set_Straight(void);
+
+static uint8_t IsDigitChar(char c)
+{
+	return (c >= '0' && c <= '9');
+}
+
+static const char *SkipValuePrefix(const char *s)
+{
+	while(*s == ' ' || *s == '=' || *s == ':')
+	{
+		s++;
+	}
+	return s;
+}
+
+static uint8_t ParseCommandValue(const char *s, float *value, uint8_t scaledHundredths)
+{
+	float integer = 0.0f;
+	float fraction = 0.0f;
+	float scale = 1.0f;
+	int8_t sign = 1;
+	uint8_t hasDigit = 0;
+	uint8_t hasDot = 0;
+
+	s = SkipValuePrefix(s);
+
+	if(*s == '-')
+	{
+		sign = -1;
+		s++;
+	}
+	else if(*s == '+')
+	{
+		s++;
+	}
+
+	while(IsDigitChar(*s))
+	{
+		integer = integer * 10.0f + (float)(*s - '0');
+		hasDigit = 1;
+		s++;
+	}
+
+	if(*s == '.')
+	{
+		hasDot = 1;
+		s++;
+		while(IsDigitChar(*s))
+		{
+			scale *= 10.0f;
+			fraction += (float)(*s - '0') / scale;
+			hasDigit = 1;
+			s++;
+		}
+	}
+
+	s = SkipValuePrefix(s);
+	if(!hasDigit || *s != '\0')
+	{
+		return 0;
+	}
+
+	*value = (integer + fraction) * (float)sign;
+	if(scaledHundredths && !hasDot)
+	{
+		*value *= 0.01f;
+	}
+	return 1;
+}
+
+static float ClampFloat(float value, float minValue, float maxValue)
+{
+	if(value < minValue) return minValue;
+	if(value > maxValue) return maxValue;
+	return value;
+}
+
+static float AbsFloat(float value)
+{
+	return value < 0.0f ? -value : value;
+}
+
+static float NormalizeYaw(float yaw)
+{
+	while(yaw > 180.0f) yaw -= 360.0f;
+	while(yaw < -180.0f) yaw += 360.0f;
+	return yaw;
+}
+
+static float GetYawError(float target, float current)
+{
+	return NormalizeYaw(target - current);
+}
+
+static void RefreshCommandWatchdog(void)
+{
+	LastCommandTick = ControlTicks;
+}
+
+static void CenterSteering(void)
+{
+	Angle = 90.0f;
+	SetServoRotation(Angle);
+}
+
+static void HardStopMotion(void)
+{
+	SpeedRank = 0;
+	rSetSpeed(0);
+	lSetSpeed(0);
+	InitAll();
+	CenterSteering();
+	is_straight = 0;
+	is_turn = 0;
+	AutoStep = AUTO_IDLE;
+	ControlMode = CTRL_IDLE;
+}
+
+static void SetStandbyMode(void)
+{
+	HardStopMotion();
+	rS = STANDBY;
+	SetLEDs(GPIO_Pin_14);
+}
+
+static void SetManualMode(void)
+{
+	if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW)
+	{
+		AutoStep = AUTO_IDLE;
+	}
+	ControlMode = CTRL_MANUAL;
+	is_straight = 0;
+	is_turn = 0;
+	headingPID.CrossTrackEnable = 0;
+}
+
+static void SetManualModeIfIdle(void)
+{
+	if(ControlMode == CTRL_IDLE)
+	{
+		SetManualMode();
+	}
+}
+
+static void EnsureAutoSpeed(void)
+{
+	if(SpeedRank == 0)
+	{
+		SetSpeedRank(AutoSpeedLevel);
+	}
+}
+
+static void PrepareStraightHold(void)
+{
+	Set_Straight();
+	ControlMode = CTRL_STRAIGHT;
+	AutoStep = AUTO_IDLE;
+}
+
+static uint8_t PrepareDistanceDrive(float distanceCm)
+{
+	if(AbsFloat(distanceCm) < 1.0f)
+	{
+		return 0;
+	}
+
+	if(distanceCm < 0.0f)
+	{
+		if(is_up == 1)
+		{
+			ExDirect(0);
+		}
+		TargetDistanceCm = -distanceCm;
+	}
+	else
+	{
+		if(is_up == -1)
+		{
+			ExDirect(1);
+		}
+		TargetDistanceCm = distanceCm;
+	}
+
+	Set_Straight();
+	Odometry_Reset();
+	ActionStartTick = ControlTicks;
+	EnsureAutoSpeed();
+	return 1;
+}
+
+static void StartDistanceDrive(float distanceCm)
+{
+	if(PrepareDistanceDrive(distanceCm))
+	{
+		ControlMode = CTRL_DISTANCE;
+		AutoStep = AUTO_IDLE;
+		USART3_printf("Distance drive %.1f cm\r\n", TargetDistanceCm);
+	}
+	else
+	{
+		USART3_printf("Invalid distance target!\r\n");
+	}
+}
+
+static uint8_t PrepareYawTurn(float relativeYawDeg)
+{
+	if(AbsFloat(relativeYawDeg) < TURN_DONE_DEG)
+	{
+		return 0;
+	}
+
+	TargetYaw = NormalizeYaw(New_Yaw + relativeYawDeg);
+	is_straight = 0;
+	is_turn = 1;
+	headingPID.CrossTrackEnable = 0;
+	ActionStartTick = ControlTicks;
+	EnsureAutoSpeed();
+	return 1;
+}
+
+static void StartYawTurn(float relativeYawDeg)
+{
+	if(PrepareYawTurn(relativeYawDeg))
+	{
+		ControlMode = CTRL_TURN_YAW;
+		AutoStep = AUTO_IDLE;
+		USART3_printf("Yaw turn %.1f deg\r\n", relativeYawDeg);
+	}
+	else
+	{
+		USART3_printf("Invalid yaw target!\r\n");
+	}
+}
+
+static void StartAutoRoute(void)
+{
+	rS = PARKING;
+	SetLEDs(GPIO_Pin_12);
+	AutoSpeedLevel = AUTO_DEFAULT_SPEED;
+	ControlMode = CTRL_AUTO_ROUTE;
+	AutoStep = AUTO_FORWARD1;
+	if(PrepareDistanceDrive(AUTO_FORWARD1_CM))
+	{
+		USART3_printf("Auto route start\r\n");
+	}
+	else
+	{
+		SetStandbyMode();
+		USART3_printf("Auto route failed\r\n");
+	}
+}
+
+static uint8_t UpdateDistanceDrive(void)
+{
+	if(TargetDistanceCm <= 0.0f)
+	{
+		return 1;
+	}
+	if((TargetDistanceCm - odom.distance) <= DISTANCE_DONE_CM)
+	{
+		return 1;
+	}
+	return 0;
+}
+
+static uint8_t UpdateYawTurn(void)
+{
+	float error = GetYawError(TargetYaw, New_Yaw);
+	float correction;
+
+	if(AbsFloat(error) <= TURN_DONE_DEG)
+	{
+		SpeedRank = 0;
+		CenterSteering();
+		is_turn = 0;
+		return 1;
+	}
+
+	correction = ClampFloat(error * TURN_SERVO_KP, -TURN_SERVO_MAX_OFFSET, TURN_SERVO_MAX_OFFSET);
+	if(is_up == -1)
+	{
+		correction = -correction;
+	}
+
+	Angle = ClampFloat(90.0f + correction, 0.0f, 180.0f);
+	SetServoRotation(Angle);
+	EnsureAutoSpeed();
+	return 0;
+}
+
+static void UpdateControlTask(void)
+{
+	if((ControlMode == CTRL_MANUAL || ControlMode == CTRL_STRAIGHT) &&
+	   SpeedRank != 0 &&
+	   (uint32_t)(ControlTicks - LastCommandTick) > REMOTE_TIMEOUT_MS)
+	{
+		SetStandbyMode();
+		USART3_printf("Remote timeout stop!\r\n");
+		return;
+	}
+
+	if((ControlMode == CTRL_DISTANCE ||
+	   (ControlMode == CTRL_AUTO_ROUTE && (AutoStep == AUTO_FORWARD1 || AutoStep == AUTO_FORWARD2))) &&
+	   (uint32_t)(ControlTicks - ActionStartTick) > DISTANCE_TIMEOUT_MS)
+	{
+		SetStandbyMode();
+		USART3_printf("Distance timeout stop!\r\n");
+		return;
+	}
+
+	if((ControlMode == CTRL_TURN_YAW ||
+	   (ControlMode == CTRL_AUTO_ROUTE && AutoStep == AUTO_TURN1)) &&
+	   (uint32_t)(ControlTicks - ActionStartTick) > TURN_TIMEOUT_MS)
+	{
+		SetStandbyMode();
+		USART3_printf("Turn timeout stop!\r\n");
+		return;
+	}
+
+	if(ControlMode == CTRL_DISTANCE)
+	{
+		if(UpdateDistanceDrive())
+		{
+			SetStandbyMode();
+			USART3_printf("Distance done\r\n");
+		}
+	}
+	else if(ControlMode == CTRL_TURN_YAW)
+	{
+		if(UpdateYawTurn())
+		{
+			SetStandbyMode();
+			USART3_printf("Yaw turn done\r\n");
+		}
+	}
+	else if(ControlMode == CTRL_AUTO_ROUTE)
+	{
+		if(AutoStep == AUTO_FORWARD1)
+		{
+			if(UpdateDistanceDrive())
+			{
+				SpeedRank = 0;
+				if(PrepareYawTurn(AUTO_TURN_DEG))
+				{
+					AutoStep = AUTO_TURN1;
+				}
+				else
+				{
+					SetStandbyMode();
+					USART3_printf("Auto turn failed\r\n");
+				}
+			}
+		}
+		else if(AutoStep == AUTO_TURN1)
+		{
+			if(UpdateYawTurn())
+			{
+				if(PrepareDistanceDrive(AUTO_FORWARD2_CM))
+				{
+					AutoStep = AUTO_FORWARD2;
+				}
+				else
+				{
+					SetStandbyMode();
+					USART3_printf("Auto forward failed\r\n");
+				}
+			}
+		}
+		else if(AutoStep == AUTO_FORWARD2)
+		{
+			if(UpdateDistanceDrive())
+			{
+				SetStandbyMode();
+				rS = PARKING;
+				SetLEDs(GPIO_Pin_12);
+				USART3_printf("Auto route done\r\n");
+			}
+		}
+	}
+}
+
 
 void SpeedAcc()
 {		
-		if(ABS(SpeedRank) < 720)
+		int16_t rank = ABS(SpeedRank);
+		if(rank < 720)
 		{
-			SpeedRank = ABSTRACT(is_up)*((ABS(SpeedRank) + SPEEDSTEP));
+			rank += SPEEDSTEP;
+			if(rank > 720) rank = 720;
+			SpeedRank = ABSTRACT(is_up) * rank;
 		}
 }
 
 void SpeedSlowDown()
 {		
-		if(ABS(SpeedRank) > 0)
+		int16_t rank = ABS(SpeedRank);
+		if(rank > 0)
 		{
-			SpeedRank = ABSTRACT(is_up)*((ABS(SpeedRank) - SPEEDSTEP));
+			rank -= SPEEDSTEP;
+			if(rank < 0) rank = 0;
+			SpeedRank = ABSTRACT(is_up) * rank;
 		}
 }
 
@@ -104,6 +536,10 @@ void ExDirect(uint8_t Rot)
 	// 复位航向PID全部状态
 	HeadingPID_Reset(&headingPID);  // 复位航向PID全部状态(保留Kp/Ki/Kd设置)
 	Odometry_Reset();  // 换向时里程计重新标定原点
+	if(is_straight)
+	{
+		headingPID.CrossTrackEnable = 1;
+	}
 	is_Switch =1;
 }
 
@@ -131,6 +567,7 @@ void Set_Straight()
 	// 复位PID全部状态
 	HeadingPID_Reset(&headingPID);  // 复位航向PID全部状态(保留Kp/Ki/Kd设置)
 	// 复位里程计: 以当前位置为原点,前进方向为Y轴
+	headingPID.CrossTrackEnable = 1;
 	Odometry_Reset();
 }
 
@@ -240,6 +677,230 @@ void keep_straight()
 	SetServoRotation(Angle);
 }
 
+static void HandleTextCommand(char *pBuffer)
+{
+	float value = 0.0f;
+
+	RefreshCommandWatchdog();
+
+	if(strcmp((const char *)pBuffer, "RC_HB") == 0)
+	{
+		USART3_printf("OK\r\n");
+	}
+	else if(strcmp((const char *)pBuffer, "RC_STOP") == 0 || strcmp((const char *)pBuffer, "AU_STOP") == 0)
+	{
+		USART3_printf("Stop!\r\n");
+		SetStandbyMode();
+	}
+	else if(strcmp((const char *)pBuffer, "RC_MAN") == 0)
+	{
+		SetManualMode();
+		USART3_printf("Manual mode\r\n");
+	}
+	else if(strcmp((const char *)pBuffer, "RC_STR") == 0)
+	{
+		PrepareStraightHold();
+		USART3_printf("Straight hold mode\r\n");
+	}
+	else if(strcmp((const char *)pBuffer, "RC_AUTO") == 0 || strcmp((const char *)pBuffer, "AU_RUN") == 0)
+	{
+		StartAutoRoute();
+	}
+	else if(strncmp((const char *)pBuffer, "RC_DST", 6) == 0)
+	{
+		if(ParseCommandValue(&pBuffer[6], &value, 0))
+		{
+			StartDistanceDrive(value);
+		}
+		else
+		{
+			USART3_printf("Invalid distance value!\r\n");
+		}
+	}
+	else if(strncmp((const char *)pBuffer, "RC_YAW", 6) == 0)
+	{
+		if(ParseCommandValue(&pBuffer[6], &value, 0))
+		{
+			StartYawTurn(value);
+		}
+		else
+		{
+			USART3_printf("Invalid yaw value!\r\n");
+		}
+	}
+	else if(strncmp((const char *)pBuffer, "RC_SPD", 6) == 0)
+	{
+		if(ParseCommandValue(&pBuffer[6], &value, 0) && value >= 0.0f && value <= 6.0f)
+		{
+			if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW)
+			{
+				SetManualMode();
+			}
+			SetManualModeIfIdle();
+			SetSpeedRank((int8_t)value);
+			USART3_printf("SET %d Rank!\r\n", SpeedRank);
+		}
+		else
+		{
+			USART3_printf("Invalid speed rank!\r\n");
+		}
+	}
+	else if(strncmp((const char *)pBuffer, "RC_STE", 6) == 0)
+	{
+		if(ParseCommandValue(&pBuffer[6], &value, 0))
+		{
+			SetManualMode();
+			Angle = ClampFloat(value, 0.0f, 180.0f);
+			SetServoRotation(Angle);
+			USART3_printf("Servo to %f deg!\r\n", Angle);
+		}
+		else
+		{
+			USART3_printf("Invalid servo value!\r\n");
+		}
+	}
+	else if(strcmp((const char *)pBuffer,COMMANDS[7]) == 0)
+	{
+		USART3_printf("Reset!\r\n");
+		SoftReset();
+	}
+	else if(strcmp((const char *)pBuffer,COMMANDS[6]) == 0)
+	{
+		SetManualMode();
+		USART3_printf("Down!\r\n");
+		if(is_up == 1)ExDirect(0);
+	}
+	else if(strcmp((const char *)pBuffer,COMMANDS[5]) == 0)
+	{
+		SetManualMode();
+		USART3_printf("Up!\r\n");
+		if(is_up == -1)ExDirect(1);
+	}
+	else if(strcmp((const char *)pBuffer,COMMANDS[12]) == 0)
+	{
+		USART3_printf("Stand by!\r\n");
+		SetStandbyMode();
+	}
+	else if(strcmp((const char *)pBuffer,COMMANDS[10]) == 0)
+	{
+		USART3_printf("Parking auto!\r\n");
+		StartAutoRoute();
+	}
+	else if(strcmp((const char *)pBuffer,COMMANDS[11]) == 0)
+	{
+		USART3_printf("Hitted!\r\n");
+		SetStandbyMode();
+		rS = HITTED;
+		SetLEDs(GPIO_Pin_13);
+	}
+	else if(strcmp((const char *)pBuffer,COMMANDS[8]) == 0)
+	{
+		USART3_printf("Straight!\r\n");
+		PrepareStraightHold();
+	}
+	else if(strcmp((const char *)pBuffer,COMMANDS[9]) == 0)
+	{
+		SetManualMode();
+		is_turn = 1;
+		USART3_printf("Turn manual mode!\r\n");
+	}
+	else if(strcmp((const char *)pBuffer,COMMANDS[0]) == 0)
+	{
+		if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW)
+		{
+			SetManualMode();
+		}
+		SetManualModeIfIdle();
+		USART3_printf("SpeedRank add!\r\n");
+		SpeedAcc();
+	}
+	else if(strcmp((const char *)pBuffer,COMMANDS[1]) == 0)
+	{
+		if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW)
+		{
+			SetManualMode();
+		}
+		SetManualModeIfIdle();
+		USART3_printf("SpeedRank decline!\r\n");
+		SpeedSlowDown();
+	}
+	else if(strcmp((const char *)pBuffer,COMMANDS[3]) == 0)
+	{
+		SetManualMode();
+		USART3_printf("SpeedRank stop!\r\n");
+		SpeedRank = 0;
+		rSetSpeed(0);
+		lSetSpeed(0);
+	}
+	else if(strncmp((const char *)pBuffer,COMMANDS[13],4) == 0)
+	{
+		float t = 0.0f;
+		if((pBuffer[4] == 'P' || pBuffer[4] == 'I' || pBuffer[4] == 'D') &&
+		   ParseCommandValue(&pBuffer[5], &t, 1))
+		{
+			switch(pBuffer[4])
+			{
+			case 'P':
+				headingPID.Kp = t;
+				USART3_printf("Set heading Kp to %f!\r\n",headingPID.Kp);
+				break;
+			case 'I':
+				headingPID.Ki = t;
+				USART3_printf("Set heading Ki to %f!\r\n",headingPID.Ki);
+				break;
+			case 'D':
+				headingPID.Kd = t;
+				USART3_printf("Set heading Kd to %f!\r\n",headingPID.Kd);
+				break;
+			default:
+				USART3_printf("Unknown heading PID command!\r\n");
+				break;
+			}
+		}
+		else
+		{
+			USART3_printf("Invalid heading PID value!\r\n");
+		}
+	}
+	else if(strncmp((const char *)pBuffer,COMMANDS[4],5) == 0)
+	{
+		float rotateCmd = 0.0f;
+		if(ParseCommandValue(&pBuffer[5], &rotateCmd, 0))
+		{
+			SetManualMode();
+			Angle = ClampFloat(180.0f - rotateCmd, 0.0f, 180.0f);
+		}
+		else
+		{
+			USART3_printf("Invalid rotate value!\r\n");
+			return;
+		}
+		USART3_printf("Rotate to %f deg!\r\n",Angle);
+		SetServoRotation(Angle);
+	}
+	else if(strncmp((const char *)pBuffer,COMMANDS[2],6) == 0)
+	{
+		if(pBuffer[6] >= '0' && pBuffer[6] <= '6')
+		{
+			if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW)
+			{
+				SetManualMode();
+			}
+			SetManualModeIfIdle();
+			SetSpeedRank(pBuffer[6]-'0');
+			USART3_printf("SET %d Rank!\r\n",SpeedRank);
+		}
+		else
+		{
+			USART3_printf("Invalid speed rank!\r\n");
+		}
+	}
+	else
+	{
+		USART3_printf("Unknown command!\r\n");
+	}
+}
+
 int main ()
 {
 	KalmanFilter_Init(&Kal_Yaw,0.5,0.1,1,100);   // q=0.5: 稳态增益~83%,快速跟踪yaw变化(原0.01太慢仅吸收9%)
@@ -262,12 +923,11 @@ int main ()
 	SetServoRotation(90.0);
 	
 	Motor_Init();
-	Set_Straight();
-	is_straight = 0;                                     
+	SetStandbyMode();
+	RefreshCommandWatchdog();
 	char * pBuffer = NULL;	
 	
 	//校验MPU6050是否成功读到数据。
-	int8_t * pB = NULL;
 	USART3_printf("Everything is ready!\r\n");
 	while(1)
 	{
@@ -276,120 +936,10 @@ int main ()
 		if( GetUSART3RXTState() == 1)
 		{
 			pBuffer = GetUSART3TextBuffer();
-					
-			if(strcmp((const char *)pBuffer,COMMANDS[7]) == 0)
-			{
-				USART3_printf("Reset!\r\n");
-	
-				SoftReset();
-			}
-			else if(strcmp((const char *)pBuffer,COMMANDS[6]) == 0)
-			{
-				USART3_printf("Down!\r\n");
-				if(is_up == 1)ExDirect(0);
-			}
-			else if(strcmp((const char *)pBuffer,COMMANDS[5]) == 0)
-			{
-				USART3_printf("Up!\r\n");
-				if(is_up == -1)ExDirect(1);
-			}
-			else if(strcmp((const char *)pBuffer,COMMANDS[12]) == 0)
-			{
-				USART3_printf("Stand by!\r\n");
-	
-				rS = STANDBY;
-
-				SetLEDs(GPIO_Pin_14);
-			}
-			else if(strcmp((const char *)pBuffer,COMMANDS[10]) == 0)
-			{
-				USART3_printf("Parking!\r\n");
-				
-				rS = PARKING;
-
-				SetLEDs(GPIO_Pin_12);
-			}
-			else if(strcmp((const char *)pBuffer,COMMANDS[11]) == 0)
-			{
-				USART3_printf("	Hitted!\r\n");
-
-				rS = HITTED;
-
-				SetLEDs(GPIO_Pin_13);
-			}
-			else if(strcmp((const char *)pBuffer,COMMANDS[8]) == 0)
-			{
-				USART3_printf("Straight!\r\n");
-				if(!is_straight) Set_Straight();
-			}
-			else if(strcmp((const char *)pBuffer,COMMANDS[0]) == 0)
-			{
-				USART3_printf("SpeedRank add!\r\n");
-				//lSetSpeed(400);
-				SpeedAcc();
-			}
-			else if(strcmp((const char *)pBuffer,COMMANDS[1]) == 0)
-			{
-				USART3_printf("SpeedRank decline!\r\n");
-				SpeedSlowDown();
-			}
-			else if(strcmp((const char *)pBuffer,COMMANDS[3]) == 0)
-			{
-				USART3_printf("SpeedRank stop!\r\n");
-				
-				SpeedRank = 0;
-			}
-			else if(strncmp((const char *)pBuffer,COMMANDS[13],4) == 0)
-			{
-				pBuffer = GetUSART3TextBuffer();
-				float t = (float)(100*pBuffer[4]+10*pBuffer[5] + pBuffer[6]-111*'0')/100;
-				switch(pBuffer[4])
-				{
-					//输出格式为xxx,两位小数基本够用了。
-					case 'P':
-					{
-						headingPID.Kp = t;
-						USART3_printf("Set heading Kp to %f!\r\n",headingPID.Kp);
-						break;
-					}
-					case 'I':
-					{
-						headingPID.Ki = t;
-						USART3_printf("Set heading Ki to %f!\r\n",headingPID.Ki);
-						break;
-					}
-					case 'D':
-					{
-						headingPID.Kd = t;
-						USART3_printf("Set heading Kd to %f!\r\n",headingPID.Kd);
-						break;
-					}
-				}				
-			}
-			else if(strncmp((const char *)pBuffer,COMMANDS[4],5) == 0)
-			{
-				pBuffer = GetUSART3TextBuffer();
-				//左转为加,右转为减。。
-				if(pBuffer[7] == '.')
-				{
-					Angle = 180-(float)(10*pBuffer[5]+pBuffer[6] -11*'0');
-				}
-				else
-				{
-					Angle = 180-(float)(100*pBuffer[5]+10*pBuffer[6] + pBuffer[7]-111*'0');
-				}
-				//现在这里的阿克曼没法建模所以我们可能需要用硬编码的方法拟合转向角的状态。
-				//Angle = 180-(float)(100*pBuffer[5]+10*pBuffer[6] + pBuffer[7]-111*'0');
-				USART3_printf("Rotate to %f deg!\r\n",Angle);
-				SetServoRotation(Angle);
-			}
-			else if(strncmp((const char *)pBuffer,COMMANDS[2],6) == 0)
-			{
-				pBuffer = GetUSART3TextBuffer();
-				SetSpeedRank(pBuffer[6]-'0');
-				USART3_printf("SET %d Rank!\r\n",SpeedRank);
-			}
+			HandleTextCommand(pBuffer);
 		}
+
+		UpdateControlTask();
 
 		
 		//USART3_printf("%d,%d,%d,%d,%d,%d\r\n",MD.xAcc,MD.yAcc,MD.zAcc,MD.xGyro,MD.yGyro,MD.zGyro);
@@ -398,20 +948,25 @@ int main ()
 		//USART3_printf("%f,%f,%f,%f,%f,%f,%f\r\n",EA.MPU6050_Yaw,EA.MPU6050_Roll,EA.MPU6050_Pitch,MD.zAcc*G*16/(0X7FFF),atan2(MD.xAcc,MD.yAcc)/PI*180,atan2(MD.yAcc,MD.zAcc)/PI*180,atan2(MD.xAcc,MD.zAcc)/PI*180);
 		 //USART3_printf("%.3f,%.3f,%.3f\r\n", MM.roll, MM.pitch, MM.yaw);
 		 //USART3_printf("%f,%f,%f,%d,%f,%f\r\n",rSpeed.Speed,lSpeed.Speed,aveSpeed,SpeedRank,rSpeed_PID.Out,lSpeed_PID.Out);
-		 USART3_printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\r\n",MM.GyroX/16.4f, New_Yaw, Angle, aveSpeed, odom.x, odom.y, headingPID.Kp, headingPID.Ki, headingPID.Kd);
+		 if(TelemetryReady)
+		 {
+			 TelemetryReady = 0;
+			 USART3_printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\r\n",MM.GyroX/16.4f, New_Yaw, Angle, aveSpeed, odom.x, odom.y, headingPID.Kp, headingPID.Ki, headingPID.Kd);
+		 }
 	}
 }
 
 void SysTick_Handler(void)
 {
+	ControlTicks++;
 	//GetALLData(&MD);
 	//CalEulerAngleHandler(&MD);
 	//ComplementaryFilter(&MD);
 	
 	static uint16_t SwitchCnt = 0;
 	static uint16_t MPU6050Cnt = 0;
-	static uint16_t SpeedCnt = 0;
 	static uint16_t StraightCnt = 0;
+	static uint16_t TelemetryCnt = 0;
 
 	if(EXCOUNT(MPU6050Cnt,5) == 1)
 	{
@@ -450,4 +1005,9 @@ void SysTick_Handler(void)
 
 		aveSpeed = (rSpeed.Speed + lSpeed.Speed)*0.5f;
 	}	
+
+	if(EXCOUNT(TelemetryCnt,100) == 1)
+	{
+		TelemetryReady = 1;
+	}
 }

@@ -57,6 +57,7 @@ void MYI2C_Write_Reg(i2cbus_struct* i2c_bus,uint8_t RegAddress, uint16_t Data);/
 uint16_t MYI2C_Read_Reg(i2cbus_struct* i2c_bus,uint8_t RegAddress);            //iic读寄存器
 void MYI2C_Write_Reg_Continue(i2cbus_struct* i2c_bus, uint8_t RegAddress, uint8_t* data_array, uint16_t array_size);//iic连续写寄存器
 void MYI2C_Read_Reg_Continue(i2cbus_struct* i2c_bus, uint8_t RegAddress, uint16_t read_len, uint8_t* data_buf);//iic连续读寄存器
+uint8_t MYI2C_Read_Reg_Continue_Status(i2cbus_struct* i2c_bus, uint8_t RegAddress, uint16_t read_len, uint8_t* data_buf);
 
 
 //////////////////扩展函数////////////////////

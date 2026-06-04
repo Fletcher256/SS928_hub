@@ -282,6 +282,40 @@ void MYI2C_Read_Reg_Continue(i2cbus_struct *i2c_bus, uint8_t RegAddress, uint16_
     _SI2C_Stop();
 }
 
+uint8_t MYI2C_Read_Reg_Continue_Status(i2cbus_struct *i2c_bus, uint8_t RegAddress, uint16_t read_len, uint8_t *data_buf)
+{
+    P_this = i2c_bus;
+    _SI2C_Start();
+    _SI2C_WriteByte(i2c_bus->address);
+    if (_SI2C_ReceiveAck() == 1) {
+        _SI2C_Stop();
+        return 1;
+    }
+    _SI2C_WriteByte(RegAddress);
+    if (_SI2C_ReceiveAck() == 1) {
+        _SI2C_Stop();
+        return 1;
+    }
+
+    _SI2C_Start();
+    _SI2C_WriteByte(i2c_bus->address | 0x01);
+    if (_SI2C_ReceiveAck() == 1) {
+        _SI2C_Stop();
+        return 1;
+    }
+
+    for (uint16_t i = 0; i < read_len; i++) {
+        data_buf[i] = _SI2C_ReceiveByte();
+        if (i < read_len - 1) {
+            _SI2C_WriteAck(0);
+        } else {
+            _SI2C_WriteAck(1);
+        }
+    }
+    _SI2C_Stop();
+    return 0;
+}
+
 uint8_t MYI2C_Add_Scan(i2cbus_struct *i2c_bus)
 {
     P_this = i2c_bus;

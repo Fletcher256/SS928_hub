@@ -16,13 +16,15 @@ uint16_t U3Data = 0;
 
 uint16_t BufferCnt = 0;
 
+#define USART3_BUFFER_SIZE 128
+
 int8_t DataBuffer[128];
 
-int8_t TextBuffer[128];
+char TextBuffer[USART3_BUFFER_SIZE];
 
 //SET指令可以设置当前的SpeedRank。
 //DT:方向;SR,目标速度等级,RT:角度.
-char * COMMANDS[] = {
+const char * COMMANDS[] = {
 			"SR_ACC",
 			"SR_DEC",
 			"SR_SET",
@@ -145,7 +147,7 @@ void USART3_SendArray(int8_t Array[],uint32_t LEN)
 	}
 }
 
-void USART3_SendString(int8_t Array[])
+void USART3_SendString(const char Array[])
 {
 	for(uint32_t i = 0;Array[i]!='\0';i++)
 	{
@@ -191,9 +193,9 @@ int fputc(int ch, FILE * serial)
 }
 
 //这个封装的方案不改printf底层但要开缓冲区
-void USART3_printf(char * format,...)
+void USART3_printf(const char * format,...)
 {
-	int8_t str[100];
+	char str[100];
 	
 	va_list ap;
 	
@@ -232,7 +234,7 @@ void SendArrayPackage(int8_t Array[],uint32_t LEN)
 	USART3_SendByte(DPACKAGE_TAIL);
 }
 
-void SendStringPackage(int8_t Array[])
+void SendStringPackage(const char Array[])
 {
 	USART3_SendByte(TPACKAGE_HEAD);
 	USART3_SendString(Array);
@@ -245,7 +247,7 @@ int8_t * GetUSART3DataBuffer()
 	return DataBuffer;
 }
 
-int8_t * GetUSART3TextBuffer()
+char * GetUSART3TextBuffer()
 {
 	return TextBuffer;
 }
@@ -330,9 +332,10 @@ void USART3_IRQHandler()
 //		}
 		
 		//文本交互模式。使用指令集定义执行。
-		if(U3Data == TPACKAGE_HEAD && isUSART3_TState == 0)
+		if(U3Data == TPACKAGE_HEAD)
 		{
 			isUSART3_TState = 1;
+			BufferCnt = 0;
 		}			
 		//中途,正常读取数据
 		else if(isUSART3_TState == 1)
@@ -345,9 +348,18 @@ void USART3_IRQHandler()
 				BufferCnt = 0;
 			}
 			//否则读取数据(及时是和头部一样的数据也没关系。)
-			else
+			else if(U3Data != TPACKAGE_TAIL1)
 			{
-				TextBuffer[BufferCnt++] = U3Data;
+				if(BufferCnt < (USART3_BUFFER_SIZE - 1))
+				{
+					TextBuffer[BufferCnt++] = (char)U3Data;
+				}
+				else
+				{
+					BufferCnt = 0;
+					isUSART3_TState = 0;
+					TextBuffer[0] = '\0';
+				}
 			}
 		}
 		

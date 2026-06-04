@@ -1,7 +1,7 @@
 version: "4.1"
 name: Car_v1
 type: ARM
-deviceName: STM32F100C8
+deviceName: STM32F103C8
 packDir: .pack/Keil/STM32F1xx_DFP.2.4.1
 srcDirs: []
 virtualFolder:
@@ -18,67 +18,67 @@ virtualFolder:
     - path: HARDWARE/Rotary_encoder.c
     - path: HARDWARE/USART.c
     - path: main.c
-    - path: ../Test1/LIBS/misc.c
-    - path: ../Test1/LIBS/misc.h
-    - path: ../Test1/LIBS/stm32f10x_adc.c
-    - path: ../Test1/LIBS/stm32f10x_adc.h
-    - path: ../Test1/LIBS/stm32f10x_bkp.c
-    - path: ../Test1/LIBS/stm32f10x_bkp.h
-    - path: ../Test1/LIBS/stm32f10x_can.c
-    - path: ../Test1/LIBS/stm32f10x_can.h
-    - path: ../Test1/LIBS/stm32f10x_cec.c
-    - path: ../Test1/LIBS/stm32f10x_cec.h
-    - path: ../Test1/LIBS/stm32f10x_crc.c
-    - path: ../Test1/LIBS/stm32f10x_crc.h
-    - path: ../Test1/LIBS/stm32f10x_dac.c
-    - path: ../Test1/LIBS/stm32f10x_dac.h
-    - path: ../Test1/LIBS/stm32f10x_dbgmcu.c
-    - path: ../Test1/LIBS/stm32f10x_dbgmcu.h
-    - path: ../Test1/LIBS/stm32f10x_dma.c
-    - path: ../Test1/LIBS/stm32f10x_dma.h
-    - path: ../Test1/LIBS/stm32f10x_exti.c
-    - path: ../Test1/LIBS/stm32f10x_exti.h
-    - path: ../Test1/LIBS/stm32f10x_flash.c
-    - path: ../Test1/LIBS/stm32f10x_flash.h
-    - path: ../Test1/LIBS/stm32f10x_fsmc.c
-    - path: ../Test1/LIBS/stm32f10x_fsmc.h
-    - path: ../Test1/LIBS/stm32f10x_gpio.c
-    - path: ../Test1/LIBS/stm32f10x_gpio.h
-    - path: ../Test1/LIBS/stm32f10x_i2c.c
-    - path: ../Test1/LIBS/stm32f10x_i2c.h
-    - path: ../Test1/LIBS/stm32f10x_iwdg.c
-    - path: ../Test1/LIBS/stm32f10x_iwdg.h
-    - path: ../Test1/LIBS/stm32f10x_pwr.c
-    - path: ../Test1/LIBS/stm32f10x_pwr.h
-    - path: ../Test1/LIBS/stm32f10x_rcc.c
-    - path: ../Test1/LIBS/stm32f10x_rcc.h
-    - path: ../Test1/LIBS/stm32f10x_rtc.c
-    - path: ../Test1/LIBS/stm32f10x_rtc.h
-    - path: ../Test1/LIBS/stm32f10x_sdio.c
-    - path: ../Test1/LIBS/stm32f10x_sdio.h
-    - path: ../Test1/LIBS/stm32f10x_spi.c
-    - path: ../Test1/LIBS/stm32f10x_spi.h
-    - path: ../Test1/LIBS/stm32f10x_tim.c
-    - path: ../Test1/LIBS/stm32f10x_tim.h
-    - path: ../Test1/LIBS/stm32f10x_usart.c
-    - path: ../Test1/LIBS/stm32f10x_usart.h
-    - path: ../Test1/LIBS/stm32f10x_wwdg.c
-    - path: ../Test1/LIBS/stm32f10x_wwdg.h
-    - path: ../Test1/SYSTEM/Timers.c
+    - path: LIBS/misc.c
+    - path: LIBS/misc.h
+    - path: LIBS/stm32f10x_adc.c
+    - path: LIBS/stm32f10x_adc.h
+    - path: LIBS/stm32f10x_bkp.c
+    - path: LIBS/stm32f10x_bkp.h
+    - path: LIBS/stm32f10x_can.c
+    - path: LIBS/stm32f10x_can.h
+    - path: LIBS/stm32f10x_cec.c
+    - path: LIBS/stm32f10x_cec.h
+    - path: LIBS/stm32f10x_crc.c
+    - path: LIBS/stm32f10x_crc.h
+    - path: LIBS/stm32f10x_dac.c
+    - path: LIBS/stm32f10x_dac.h
+    - path: LIBS/stm32f10x_dbgmcu.c
+    - path: LIBS/stm32f10x_dbgmcu.h
+    - path: LIBS/stm32f10x_dma.c
+    - path: LIBS/stm32f10x_dma.h
+    - path: LIBS/stm32f10x_exti.c
+    - path: LIBS/stm32f10x_exti.h
+    - path: LIBS/stm32f10x_flash.c
+    - path: LIBS/stm32f10x_flash.h
+    - path: LIBS/stm32f10x_fsmc.c
+    - path: LIBS/stm32f10x_fsmc.h
+    - path: LIBS/stm32f10x_gpio.c
+    - path: LIBS/stm32f10x_gpio.h
+    - path: LIBS/stm32f10x_i2c.c
+    - path: LIBS/stm32f10x_i2c.h
+    - path: LIBS/stm32f10x_iwdg.c
+    - path: LIBS/stm32f10x_iwdg.h
+    - path: LIBS/stm32f10x_pwr.c
+    - path: LIBS/stm32f10x_pwr.h
+    - path: LIBS/stm32f10x_rcc.c
+    - path: LIBS/stm32f10x_rcc.h
+    - path: LIBS/stm32f10x_rtc.c
+    - path: LIBS/stm32f10x_rtc.h
+    - path: LIBS/stm32f10x_sdio.c
+    - path: LIBS/stm32f10x_sdio.h
+    - path: LIBS/stm32f10x_spi.c
+    - path: LIBS/stm32f10x_spi.h
+    - path: LIBS/stm32f10x_tim.c
+    - path: LIBS/stm32f10x_tim.h
+    - path: LIBS/stm32f10x_usart.c
+    - path: LIBS/stm32f10x_usart.h
+    - path: LIBS/stm32f10x_wwdg.c
+    - path: LIBS/stm32f10x_wwdg.h
+    - path: Core/Timers.c
     - path: HARDWARE/LED.c
     - path: HARDWARE/LED.h
   folders:
     - name: libs
       files:
-        - path: ../Test1/START/core_cm3.c
-        - path: ../Test1/START/core_cm3.h
-        - path: ../Test1/START/stm32f10x.h
-        - path: ../Test1/START/system_stm32f10x.c
-        - path: ../Test1/START/system_stm32f10x.h
-        - path: ../Test1/USER/stm32f10x_conf.h
-        - path: ../Test1/USER/stm32f10x_it.c
-        - path: ../Test1/USER/stm32f10x_it.h
-        - path: ../Test1/START/startup_stm32f10x_md.s
+        - path: START/core_cm3.c
+        - path: START/core_cm3.h
+        - path: START/stm32f10x.h
+        - path: START/system_stm32f10x.c
+        - path: START/system_stm32f10x.h
+        - path: USER/stm32f10x_conf.h
+        - path: USER/stm32f10x_it.c
+        - path: USER/stm32f10x_it.h
+        - path: START/startup_stm32f10x_md.s
       folders: []
 dependenceList: []
 outDir: build
@@ -94,10 +94,9 @@ targets:
         - .
         - HARDWARE
         - Core
-        - ../Test1/START
-        - ../Test1/SYSTEM
-        - ../Test1/LIBS
-        - ../Test1/USER
+        - START
+        - LIBS
+        - USER
       libList: []
     excludeList: []
     settings:

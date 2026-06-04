@@ -11,11 +11,10 @@
         "${workspaceFolder}/HARDWARE",
         "${workspaceFolder}/DMP",
         "${workspaceFolder}/Core",
-        "${workspaceFolder}/.pack/Keil/STM32F1xx_DFP.2.4.1/Device/Include",
-        "${workspaceFolder}/../Test1/LIBS",
-        "${workspaceFolder}/../Test1/START",
-        "${workspaceFolder}/../Test1/USER",
-        "${workspaceFolder}/../Test1/SYSTEM"
+        "${workspaceFolder}/LIBS",
+        "${workspaceFolder}/START",
+        "${workspaceFolder}/USER",
+        "${workspaceFolder}/.pack/Keil/STM32F1xx_DFP.2.4.1/Device/Include"
       ],
       "defines": [
         "USE_STDPERIPH_DRIVER",
@@ -25,11 +24,10 @@
       "browse": {
         "path": [
           "${workspaceFolder}/**",
-          "${workspaceFolder}/.pack/Keil/STM32F1xx_DFP.2.4.1/Device/Include",
-          "${workspaceFolder}/../Test1/LIBS",
-          "${workspaceFolder}/../Test1/START",
-          "${workspaceFolder}/../Test1/USER",
-          "${workspaceFolder}/../Test1/SYSTEM"
+          "${workspaceFolder}/LIBS",
+          "${workspaceFolder}/START",
+          "${workspaceFolder}/USER",
+          "${workspaceFolder}/.pack/Keil/STM32F1xx_DFP.2.4.1/Device/Include"
         ]
       }
     }

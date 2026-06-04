@@ -1,4 +1,9 @@
 #include "stm32f10x.h"
+#include "system_stm32f10x.h"
+
+#define DWT_CTRL      (*(volatile uint32_t *)0xE0001000)
+#define DWT_CYCCNT    (*(volatile uint32_t *)0xE0001004)
+#define DWT_CTRL_CYCCNTENA_Msk (1UL << 0)
 
 void Delay_100ns(uint32_t n) {
     TIM_SetCounter(TIM2, 0);//��ʼ��ʱ
@@ -11,12 +16,17 @@ void Delay_100ns(uint32_t n) {
 
 void Delay_us(uint32_t xus)
 {
-    if(xus==0)return;
-	SysTick->LOAD = 72 * xus;				//���ö�ʱ����װֵ
-	SysTick->VAL = 0x00;					//��յ�ǰ����ֵ
-	SysTick->CTRL = 0x00000005;				//����ʱ��ԴΪHCLK��������ʱ��
-	while(!(SysTick->CTRL & 0x00010000));	//�ȴ�������0
-	SysTick->CTRL = 0x00000004;				//�رն�ʱ��
+    uint32_t ticks;
+    uint32_t start;
+
+    if(xus == 0) return;
+
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT_CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
+    ticks = (SystemCoreClock / 1000000U) * xus;
+    start = DWT_CYCCNT;
+    while((uint32_t)(DWT_CYCCNT - start) < ticks);
 }
 
 void Delay_ms(uint32_t xms){

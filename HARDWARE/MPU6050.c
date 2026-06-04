@@ -20,6 +20,9 @@ i2cbus_struct mpu6050_i2cbus; // 创建了一个IIC对象
 //////////////////////////////////////以上为方便移植的接口///////////////////////////////////////////////////////
 
 ///////////////////////////下面是寄存器地址定义//////////////////////////////////
+#undef MPU6050_READ_REG_CONTINUE
+#define MPU6050_READ_REG_CONTINUE(reg, len, P_data) MYI2C_Read_Reg_Continue_Status(&mpu6050_i2cbus, reg, len, P_data)
+
 #define MPU6050_ADDRESS           0x68 // i2c address
 #define MPU6050_SMPLRT_DIV        0x19
 #define MPU6050_CONFIG            0x1A
@@ -125,7 +128,9 @@ static int8_t MPU6050_SoftCalibrate_Z(uint16_t calibration_samples)
 
     ///////////根据X,Y,Z轴的变换规律进行修正/////////
     for (uint16_t i = 0; i < calibration_samples; i++) {
-        MPU6050_READ_REG_CONTINUE(MPU6050_GYRO_XOUT_H, 6, temp_buffer);
+        if (MPU6050_READ_REG_CONTINUE(MPU6050_GYRO_XOUT_H, 6, temp_buffer) != 0) {
+            return -1;
+        }
         GyroX = ((int16_t)(temp_buffer[0] << 8) | temp_buffer[1]);
         GyroY = ((int16_t)(temp_buffer[2] << 8) | temp_buffer[3]);
         GyroZ = ((int16_t)(temp_buffer[4] << 8) | temp_buffer[5]);
@@ -148,7 +153,9 @@ static int8_t MPU6050_SoftCalibrate_Z(uint16_t calibration_samples)
     // 检验检验校准是否成功
     gz_sum = gy_sum = gx_sum = 0;
     for (uint16_t i = 0; i < 100; i++) {
-        MPU6050_READ_REG_CONTINUE(MPU6050_GYRO_XOUT_H, 6, temp_buffer);
+        if (MPU6050_READ_REG_CONTINUE(MPU6050_GYRO_XOUT_H, 6, temp_buffer) != 0) {
+            return -1;
+        }
         GyroX = ((int16_t)(temp_buffer[0] << 8) | temp_buffer[1]);
         GyroY = ((int16_t)(temp_buffer[2] << 8) | temp_buffer[3]);
         GyroZ = ((int16_t)(temp_buffer[4] << 8) | temp_buffer[5]);
@@ -247,7 +254,9 @@ static void MPU6050_Get_Raw(MPU6050 *this)
 
     // 连续读取寄存器代码(快)!!!使用了这里单个读取寄存器代码就注释掉
     static uint8_t temp_buffer[14];
-    MPU6050_READ_REG_CONTINUE(MPU6050_ACCEL_XOUT_H, 14, temp_buffer);
+    if (MPU6050_READ_REG_CONTINUE(MPU6050_ACCEL_XOUT_H, 14, temp_buffer) != 0) {
+        return;
+    }
     this->AccX    = ((int16_t)temp_buffer[0] << 8) | temp_buffer[1];
     this->AccY    = ((int16_t)temp_buffer[2] << 8) | temp_buffer[3];
     this->AccZ    = ((int16_t)temp_buffer[4] << 8) | temp_buffer[5];

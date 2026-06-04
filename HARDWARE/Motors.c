@@ -17,6 +17,8 @@
 //小车轮胎直径:6.7cm
 #define WHEEL_C 21.04867
 
+#define ODOM_PI 3.1415926f
+
 int16_t SpeedRank = 0;
 
 int16_t is_Switch = 0;
@@ -178,9 +180,12 @@ void Odometry_Update(float left_speed_cms, float right_speed_cms)
 
 	// 中值积分提高精度
 	float mid_theta = odom.theta + dtheta * 0.5f;
-	odom.x += dc * cosf(mid_theta);
-	odom.y += dc * sinf(mid_theta);
+	// x is lateral (right positive), y is forward.
+	odom.x -= dc * sinf(mid_theta);
+	odom.y += dc * cosf(mid_theta);
 	odom.theta += dtheta;
+	while(odom.theta > ODOM_PI) odom.theta -= 2.0f * ODOM_PI;
+	while(odom.theta < -ODOM_PI) odom.theta += 2.0f * ODOM_PI;
 	odom.distance += fabsf(dc);
 }
 
@@ -552,7 +557,7 @@ void HeadingPID_Init(HeadingPID_t *p)
 	p->D_Alpha      = 0.7f;
 	p->SmoothAlpha  = 0.4f;
 	p->CrossTrackKp     = 2.0f;
-	p->CrossTrackEnable = 0;     // 默认开启
+	p->CrossTrackEnable = 1;
 
 	p->Integral      = 0.0f;
 	p->LastError     = 0.0f;
@@ -569,5 +574,5 @@ void HeadingPID_Reset(HeadingPID_t *p)
 	p->dV               = 0.0f;
 	p->SmoothedAngle    = 90.0f;
 	p->FirstRun         = 1;
-	p->CrossTrackEnable = 0;     // 直行模式下默认关闭横向修正
+	p->CrossTrackEnable = 1;
 }

@@ -121,6 +121,14 @@ void SetTIM2CH4ARR(uint16_t t)
 
 void SetServoRotation(float Angle)
 {
+	if(Angle < 0.0f)
+	{
+		Angle = 0.0f;
+	}
+	else if(Angle > 180.0f)
+	{
+		Angle = 180.0f;
+	}
 	//实际测试的时候我们可以发现,若以小车的中线为90度的话,偏移度在-60~+60度之间。
 	TIM_SetCompare2(TIM2,(Angle /180)*2000+500);
 }

@@ -15,7 +15,7 @@
 
 #include <stdarg.h>
 
-extern char * COMMANDS[];
+extern const char * COMMANDS[];
 
 void USART3_Init(void);
 
@@ -23,7 +23,7 @@ void USART3_SendByte(uint8_t Byte);
 
 void USART3_SendArray(int8_t Array[],uint32_t LEN);
 
-void USART3_SendString(int8_t Array[]);
+void USART3_SendString(const char Array[]);
 
 void USART3_SendNum(int32_t num);
 
@@ -31,7 +31,7 @@ void USART3_SendSingedNum(int32_t num);
 
 uint8_t USART_ReadByte(void);
 
-void USART3_printf(char * format,...);
+void USART3_printf(const char * format,...);
 
 uint16_t GetUSART3Data(void);
 
@@ -39,7 +39,7 @@ uint16_t GetUSART3Data(void);
 
 void SendArrayPackage(int8_t Array[],uint32_t LEN);
 
-void SendStringPackage(int8_t Array[]);
+void SendStringPackage(const char Array[]);
 
 int8_t * GetUSART3DataBuffer(void);
 
@@ -47,7 +47,7 @@ uint16_t GetUSART3BufferCnt(void);
 
 uint8_t GetUSART3RXDState(void);
 
-int8_t * GetUSART3TextBuffer(void);
+char * GetUSART3TextBuffer(void);
 
 uint8_t GetUSART3RXTState(void);
 
