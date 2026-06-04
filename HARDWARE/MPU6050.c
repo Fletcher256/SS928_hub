@@ -3,6 +3,7 @@
 #include "math.h"
 #include "stdlib.h"
 #include "stdio.h"
+#include <stdint.h>
 #include "generic.h" //主要装Delay_ms
 #include "filter.h"  //里面主要使用了PT2滤波器和卡尔曼滤波器
 
@@ -293,10 +294,13 @@ static void MPU6050_Get_Raw(MPU6050 *this)
 static inline float invSqrt(float x)
 {
     float halfx = 0.5f * x;
-    float y     = x;
-    long i      = *(long *)&y;
-    i           = 0x5f3759df - (i >> 1);
-    y           = *(float *)&i;
+    union {
+        float f;
+        uint32_t u;
+    } conv;
+    conv.f = x;
+    conv.u = 0x5f3759dfu - (conv.u >> 1);
+    float y = conv.f;
     y           = y * (1.5f - (halfx * y * y)); // 一次牛顿迭代
     return y;
 }

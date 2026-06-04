@@ -1,11 +1,12 @@
 #ifndef _KEY_H_
 #define _KEY_H_
 
+#include "stm32f10x.h"
+#include "stdarg.h"
+
 typedef unsigned char UCHAR;
 
 typedef unsigned short USHORT;
-
-#include "stdarg.h"
 
 typedef enum 
 {

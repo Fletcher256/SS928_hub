@@ -2,6 +2,24 @@
 
 STM32F103 remote/autonomous car firmware.
 
+## Build
+
+The checked-in Keil project remains available as `LED_1.uvprojx`.
+
+A GCC build entry is also provided for command-line verification:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build_gcc\build.ps1
+```
+
+The script first looks for a local xPack toolchain under `tools/gcc-arm/...`; if it is not present, it falls back to `arm-none-eabi-gcc` on `PATH`.
+
+Build outputs are written to:
+
+- `build/gcc/SS928_hub.elf`
+- `build/gcc/SS928_hub.hex`
+- `build/gcc/SS928_hub.bin`
+
 ## Serial Command Framing
 
 Text commands are sent through USART3 as:

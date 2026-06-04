@@ -554,7 +554,7 @@ void SetSpeedRank(int8_t level)
 
 void SoftReset(void)
 {
-    __set_FAULTMASK(1);    // 关闭所有中断
+    __disable_irq();       // 关闭普通中断
 	for(int i = 0;i<10000;i++);
     NVIC_SystemReset();    // 触发系统复位
 }
