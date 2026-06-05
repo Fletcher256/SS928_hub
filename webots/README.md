@@ -5,8 +5,10 @@ This directory contains a Webots R2025a project for the SS928 car control logic.
 Open the world:
 
 ```powershell
-& "D:\Program Files\Webots\msys64\mingw64\bin\webots.exe" webots\worlds\ss928_car.wbt
+powershell -ExecutionPolicy Bypass -File webots\open_ss928_webots.ps1
 ```
+
+The world file defines an explicit camera, background, and lights. If the 3D view is still black after reopening with the command above, the remaining cause is likely local Webots/OpenGL rendering state rather than this project file.
 
 Keyboard controls inside Webots:
 

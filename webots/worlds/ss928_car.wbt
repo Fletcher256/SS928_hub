@@ -6,15 +6,27 @@ WorldInfo {
 }
 
 Viewpoint {
-  orientation -0.577350269 0.577350269 0.577350269 2.094395102
-  position 2.3 2.0 2.7
+  orientation 1 0 0 -0.62
+  position 0 2.4 3.2
   near 0.01
 }
 
-TexturedBackground {
+Background {
+  skyColor [
+    0.82 0.9 1
+  ]
 }
 
-TexturedBackgroundLight {
+DirectionalLight {
+  direction -0.4 -1 -0.6
+  intensity 1.8
+  castShadows TRUE
+}
+
+PointLight {
+  location 0 2.5 1.5
+  intensity 0.8
+  radius 6
 }
 
 Solid {
