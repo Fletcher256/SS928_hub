@@ -32,6 +32,10 @@ A browser animation is available at `sim/visualizer.html`.
 
 The simulator accepts the same text commands as USART3 and can inject virtual yaw/odometry values. See `sim/README.md` for scenario syntax and limitations.
 
+## Webots Simulation
+
+A Webots R2025a desktop simulation is available at `webots/worlds/ss928_car.wbt`. It reuses the Python control simulator and adds a 3D car scene, keyboard controls, labels, and a path trail. See `webots/README.md`.
+
 ## Serial Command Framing
 
 Text commands are sent through USART3 as:
