@@ -12,4 +12,4 @@ if (!(Test-Path $World)) {
   throw "World file not found: $World"
 }
 
-Start-Process -FilePath $Webots -ArgumentList "`"$World`"" -WorkingDirectory $RepoRoot
+Start-Process -FilePath $Webots -ArgumentList @('--mode=realtime', "`"$World`"") -WorkingDirectory $RepoRoot

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>SS928 Control</title>
+  <link rel="stylesheet" href="ss928_control.css">
+  <script type="module" src="ss928_control.js"></script>
+</head>
+
+<body>
+  <main class="panel">
+    <header>
+      <h1>SS928 Control</h1>
+      <div id="connection" class="status">Waiting</div>
+    </header>
+
+    <section class="direction-pad" aria-label="Drive controls">
+      <button data-command="forward" class="primary up">Forward</button>
+      <button data-command="left" class="turn left">Left</button>
+      <button data-command="stop" class="stop">Stop</button>
+      <button data-command="right" class="turn right">Right</button>
+      <button data-command="reverse" class="primary down">Reverse</button>
+    </section>
+
+    <section class="row">
+      <button data-command="straight">Straight</button>
+      <button data-command="camera">Camera</button>
+      <button data-command="reset">Reset</button>
+      <button data-command="pause">Pause</button>
+    </section>
+
+    <section class="row">
+      <button data-command="drive60">60 cm</button>
+      <button data-command="yawLeft">Yaw +90</button>
+      <button data-command="yawRight">Yaw -90</button>
+      <button data-command="auto">Auto</button>
+    </section>
+
+    <section class="speed-grid" aria-label="Speed rank">
+      <button data-speed="1">S1</button>
+      <button data-speed="2">S2</button>
+      <button data-speed="3">S3</button>
+      <button data-speed="4">S4</button>
+      <button data-speed="5">S5</button>
+      <button data-speed="6">S6</button>
+    </section>
+
+    <section class="readout">
+      <div><span>Mode</span><strong id="mode">-</strong></div>
+      <div><span>Speed</span><strong id="speed">0</strong></div>
+      <div><span>Servo</span><strong id="angle">90.0</strong></div>
+      <div><span>Yaw</span><strong id="yaw">0.0</strong></div>
+      <div><span>Distance</span><strong id="distance">0.0</strong></div>
+      <div><span>X / Y</span><strong id="position">0.0 / 0.0</strong></div>
+    </section>
+
+    <pre id="log" class="log"></pre>
+  </main>
+</body>
+
+</html>

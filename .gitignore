@@ -17,6 +17,7 @@ __pycache__/
 
 # Webots local UI state
 webots/worlds/.*.wbproj
+!webots/worlds/.ss928_car.wbproj
 
 # eide template
 *.ept

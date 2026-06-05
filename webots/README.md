@@ -8,11 +8,14 @@ Open the world:
 powershell -ExecutionPolicy Bypass -File webots\open_ss928_webots.ps1
 ```
 
-The world file defines an explicit camera, background, and lights. If the 3D view is still black after reopening with the command above, the remaining cause is likely local Webots/OpenGL rendering state rather than this project file.
+The launcher opens the world in realtime mode. The car starts stopped, the camera follows `SS928_CAR`, and the `SS928 Control` robot window provides clickable controls.
 
 Keyboard controls inside Webots:
 
-- `1` / `2` / `3`: set speed rank.
+- Use the `SS928 Control` robot window buttons for forward, reverse, turn, stop, speed, auto route, and camera reset. If the panel is hidden, right-click `SS928_CAR` and choose `Robot Window`.
+- Click the 3D view once if the keyboard focus is not inside the simulator.
+- Arrow keys / numpad arrow keys: drive forward, reverse, left, and right.
+- `1` / `2` / `3` / `4` / `5` / `6`: set speed rank.
 - `S`: straight-hold mode.
 - `D`: drive 60 cm.
 - `Q`: left yaw turn 90 degrees.

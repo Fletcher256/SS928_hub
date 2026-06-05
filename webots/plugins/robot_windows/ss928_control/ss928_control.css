@@ -1,0 +1,161 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  font: 14px/1.4 Arial, Helvetica, sans-serif;
+  color: #172033;
+  background: #eef3f8;
+}
+
+.panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.status {
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #dce6f1;
+  color: #3d4e66;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status.live {
+  background: #dff4e5;
+  color: #146c32;
+}
+
+button {
+  min-height: 38px;
+  border: 1px solid #b7c4d4;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #172033;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+.direction-pad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(80px, 1fr));
+  grid-template-rows: repeat(3, 42px);
+  gap: 8px;
+}
+
+.direction-pad .up {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.direction-pad .left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.direction-pad .stop {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.direction-pad .right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.direction-pad .down {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.primary {
+  background: #1f7a4d;
+  border-color: #17663f;
+  color: #ffffff;
+}
+
+.turn {
+  background: #f8fbff;
+}
+
+.stop {
+  background: #c62828;
+  border-color: #a31515;
+  color: #ffffff;
+}
+
+.row,
+.speed-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.speed-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.readout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.readout div {
+  min-height: 48px;
+  border: 1px solid #c8d4e1;
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: #ffffff;
+}
+
+.readout span {
+  display: block;
+  color: #5f6f84;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.readout strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log {
+  min-height: 86px;
+  max-height: 140px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid #c8d4e1;
+  border-radius: 6px;
+  padding: 8px;
+  background: #101828;
+  color: #d9e6f2;
+  font: 12px/1.45 Consolas, "Courier New", monospace;
+}
