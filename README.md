@@ -28,6 +28,8 @@ Basic command and state-machine behavior can be tested without connecting the ca
 py sim\sim_car.py
 ```
 
+A browser animation is available at `sim/visualizer.html`.
+
 The simulator accepts the same text commands as USART3 and can inject virtual yaw/odometry values. See `sim/README.md` for scenario syntax and limitations.
 
 ## Serial Command Framing

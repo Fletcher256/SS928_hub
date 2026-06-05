@@ -14,6 +14,12 @@ Run a specific scenario:
 py sim\sim_car.py sim\scenarios\basic_control.txt
 ```
 
+Open the visual simulator:
+
+```powershell
+start sim\visualizer.html
+```
+
 Supported scenario commands:
 
 - `@COMMAND`: send the same text command used by USART3, without needing `\r\n`.
