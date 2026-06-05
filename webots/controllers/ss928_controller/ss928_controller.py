@@ -145,7 +145,7 @@ class WebotsCarDebug:
             f"PID Kp={self.car.pid.kp:.2f} Ki={self.car.pid.ki:.2f} Kd={self.car.pid.kd:.2f}",
         ]
         lines.extend(self.command_log[-4:])
-        self.robot.setLabel(1, "\n".join(lines), 0.01, 0.08, 0.045, 0x0F172A, 0.0, "Consolas")
+        self.robot.setLabel(1, "\n".join(lines), 0.01, 0.08, 0.045, 0x0F172A, 0.0, "Arial")
 
     def step(self) -> bool:
         if self.robot.step(TIME_STEP_MS) == -1:
