@@ -11,6 +11,10 @@
 /out
 /tools
 
+# python cache
+__pycache__/
+*.py[cod]
+
 # eide template
 *.ept
 *.eide-template

@@ -20,6 +20,16 @@ Build outputs are written to:
 - `build/gcc/SS928_hub.hex`
 - `build/gcc/SS928_hub.bin`
 
+## PC Simulation
+
+Basic command and state-machine behavior can be tested without connecting the car:
+
+```powershell
+py sim\sim_car.py
+```
+
+The simulator accepts the same text commands as USART3 and can inject virtual yaw/odometry values. See `sim/README.md` for scenario syntax and limitations.
+
 ## Serial Command Framing
 
 Text commands are sent through USART3 as:

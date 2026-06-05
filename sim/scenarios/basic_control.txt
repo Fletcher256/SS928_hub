@@ -1,0 +1,41 @@
+# Basic command and controller smoke test.
+
+@RC_SPD2
+expect mode=MANUAL
+expect speed_rank=240
+
+@RC_STR
+expect mode=STRAIGHT
+expect angle=90
+
+sense yaw=5 x=0 distance=0
+tick 20
+expect angle<90
+
+@ST_KP1.20
+@ST_KI0.02
+@ST_KD0.30
+expect kp=1.2
+expect ki=0.02
+expect kd=0.3
+
+@RC_DST30
+expect mode=DISTANCE
+drive 1200
+expect mode=IDLE
+expect distance>=28
+
+@RC_YAW90
+expect mode=TURN_YAW
+drive 3400
+expect mode=IDLE
+
+@RC_AUTO
+expect mode=AUTO_ROUTE
+drive 3600
+expect auto=TURN1
+drive 3200
+expect auto=FORWARD2
+drive 2500
+expect mode=IDLE
+expect state=PARKING
