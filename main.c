@@ -863,6 +863,42 @@ static void HandleTextCommand(char *pBuffer)
 			USART3_printf("Invalid heading PID value!\r\n");
 		}
 	}
+	// ---- Motor Speed PID (MT_KP/MT_KI/MT_KD<value>) ----
+	else if(strncmp((const char *)pBuffer,COMMANDS[16],4) == 0)
+	{
+		float t = 0.0f;
+		if((pBuffer[4] == 'P' || pBuffer[4] == 'I' || pBuffer[4] == 'D') &&
+		   ParseCommandValue(&pBuffer[5], &t, 1))
+		{
+			switch(pBuffer[4])
+			{
+			case 'P':
+				rSpeed_PID.Kp = t;  lSpeed_PID.Kp = t;
+				USART3_printf("Set speed Kp to %.4f!
+", (double)rSpeed_PID.Kp);
+				break;
+			case 'I':
+				rSpeed_PID.Ki = t;  lSpeed_PID.Ki = t;
+				USART3_printf("Set speed Ki to %.4f!
+", (double)rSpeed_PID.Ki);
+				break;
+			case 'D':
+				rSpeed_PID.Kd = t;  lSpeed_PID.Kd = t;
+				USART3_printf("Set speed Kd to %.4f!
+", (double)rSpeed_PID.Kd);
+				break;
+			default:
+				USART3_printf("Unknown speed PID command!
+");
+				break;
+			}
+		}
+		else
+		{
+			USART3_printf("Invalid speed PID value!
+");
+		}
+	}
 	else if(strncmp((const char *)pBuffer,COMMANDS[4],5) == 0)
 	{
 		float rotateCmd = 0.0f;
@@ -1027,7 +1063,79 @@ int main ()
 					}
 				}				
 			}
-			else if(strncmp((const char *)pBuffer,COMMANDS[4],5) == 0)
+			// ---- µÁª˙ÀŸ∂» PID ≤Œ ˝…Ë÷√ (MT_KP/MT_KI/MT_KD<value>) ----
+		else if(strncmp((const char *)pBuffer,COMMANDS[16],4) == 0)
+		{
+			float t = 0.0f;
+			if((pBuffer[4] == 'P' || pBuffer[4] == 'I' || pBuffer[4] == 'D') &&
+			   ParseCommandValue(&pBuffer[5], &t, 1))
+			{
+				switch(pBuffer[4])
+				{
+				case 'P':
+					rSpeed_PID.Kp = t;  lSpeed_PID.Kp = t;
+					USART3_printf("Set speed Kp to %.4f!
+", (double)rSpeed_PID.Kp);
+					break;
+				case 'I':
+					rSpeed_PID.Ki = t;  lSpeed_PID.Ki = t;
+					USART3_printf("Set speed Ki to %.4f!
+", (double)rSpeed_PID.Ki);
+					break;
+				case 'D':
+					rSpeed_PID.Kd = t;  lSpeed_PID.Kd = t;
+					USART3_printf("Set speed Kd to %.4f!
+", (double)rSpeed_PID.Kd);
+					break;
+				default:
+					USART3_printf("Unknown speed PID command!
+");
+					break;
+				}
+			}
+			else
+			{
+				USART3_printf("Invalid speed PID value!
+");
+			}
+		}
+		// ---- Motor Speed PID (MT_KP/MT_KI/MT_KD<value>) ----
+	else if(strncmp((const char *)pBuffer,COMMANDS[16],4) == 0)
+	{
+		float t = 0.0f;
+		if((pBuffer[4] == 'P' || pBuffer[4] == 'I' || pBuffer[4] == 'D') &&
+		   ParseCommandValue(&pBuffer[5], &t, 1))
+		{
+			switch(pBuffer[4])
+			{
+			case 'P':
+				rSpeed_PID.Kp = t;  lSpeed_PID.Kp = t;
+				USART3_printf("Set speed Kp to %.4f!
+", (double)rSpeed_PID.Kp);
+				break;
+			case 'I':
+				rSpeed_PID.Ki = t;  lSpeed_PID.Ki = t;
+				USART3_printf("Set speed Ki to %.4f!
+", (double)rSpeed_PID.Ki);
+				break;
+			case 'D':
+				rSpeed_PID.Kd = t;  lSpeed_PID.Kd = t;
+				USART3_printf("Set speed Kd to %.4f!
+", (double)rSpeed_PID.Kd);
+				break;
+			default:
+				USART3_printf("Unknown speed PID command!
+");
+				break;
+			}
+		}
+		else
+		{
+			USART3_printf("Invalid speed PID value!
+");
+		}
+	}
+	else if(strncmp((const char *)pBuffer,COMMANDS[4],5) == 0)
 			{
 				pBuffer = GetUSART3TextBuffer();
 				//Â∑¶ËΩ¨‰∏∫Âä†,Âè≥ËΩ¨‰∏∫Âáè„ÄÇ„ÄÇ
@@ -1062,7 +1170,7 @@ int main ()
 		 if(TelemetryReady)
 		 {
 			 TelemetryReady = 0;
-			 USART3_printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\r\n",MM.GyroX/16.4f, New_Yaw, Angle, aveSpeed, odom.x, odom.y, headingPID.Kp, headingPID.Ki, headingPID.Kd);
+			 USART3_printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\r\n",MM.GyroX/16.4f, New_Yaw, Angle, aveSpeed, odom.x, odom.y, odom.theta, lSpeed.Speed, rSpeed.Speed);
 		 }
 	}
 }

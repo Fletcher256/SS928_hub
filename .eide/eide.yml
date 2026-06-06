@@ -10,14 +10,11 @@ virtualFolder:
     - path: HARDWARE/_MyI2C_.c
     - path: HARDWARE/filter.c
     - path: HARDWARE/generic.c
-    - path: HARDWARE/Keys.c
     - path: HARDWARE/Motors.c
     - path: HARDWARE/MPU6050.c
     - path: HARDWARE/OLED.c
     - path: HARDWARE/PWMO.c
-    - path: HARDWARE/Rotary_encoder.c
     - path: HARDWARE/USART.c
-    - path: main.c
     - path: LIBS/misc.c
     - path: LIBS/misc.h
     - path: LIBS/stm32f10x_adc.c
@@ -67,6 +64,8 @@ virtualFolder:
     - path: Core/Timers.c
     - path: HARDWARE/LED.c
     - path: HARDWARE/LED.h
+    - path: HARDWARE/Steering.c
+    - path: HARDWARE/Steering.h
   folders:
     - name: libs
       files:
@@ -79,6 +78,9 @@ virtualFolder:
         - path: USER/stm32f10x_it.c
         - path: USER/stm32f10x_it.h
         - path: START/startup_stm32f10x_md.s
+        - path: USER/FSM.c
+        - path: USER/FSM.h
+        - path: USER/main.c
       folders: []
 dependenceList: []
 outDir: build

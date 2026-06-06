@@ -40,7 +40,10 @@ const char * COMMANDS[] = {
 			"ST_SB",
 			"ST_KP",
 			"ST_KI",
-			"ST_KD"
+			"ST_KD",
+			"MT_KP",	// [16]
+			"MT_KI",	// [17]
+			"MT_KD"
 };
 
 void USART3_Init()
