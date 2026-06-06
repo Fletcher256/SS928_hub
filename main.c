@@ -11,6 +11,8 @@
 #include "string.h"
 #include <math.h>
 
+#define FIRMWARE_VERSION "SS928-CTRL-2.0"
+
 // ========== 航向PID控制器 ==========
 // 坐标约定: 舵机>90°=左转, <90°=右转; MPU6050 yaw: 左转为正,右转为负
 // 调用周期: 与SysTick同步,当前每10ms执行一次(EXCOUNT(StraightCnt,10))
@@ -61,6 +63,7 @@ KalmanFilter Kal_Roll;
 KalmanFilter Kal_Pitch;
 
 volatile uint8_t TelemetryReady = 0;
+static uint8_t TelemetryEnabled = 0;
 volatile uint32_t ControlTicks = 0;
 static volatile uint16_t MpuTaskElapsedMs = 0;
 static volatile uint8_t StraightTaskReady = 0;
@@ -76,6 +79,7 @@ static volatile uint8_t StraightTaskReady = 0;
 #define TURN_DONE_DEG           3.0f
 #define TURN_SERVO_MAX_OFFSET   35.0f
 #define TURN_SERVO_KP           0.75f
+#define AUTO_MAX_SPEED          6U
 
 typedef enum ControlMode
 {
@@ -84,6 +88,7 @@ typedef enum ControlMode
 	CTRL_STRAIGHT,
 	CTRL_DISTANCE,
 	CTRL_TURN_YAW,
+	CTRL_ARC,
 	CTRL_AUTO_ROUTE
 } ControlMode_t;
 
@@ -102,10 +107,25 @@ static uint32_t ActionStartTick = 0;
 static float TargetDistanceCm = 0.0f;
 static float TargetYaw = 0.0f;
 static uint8_t AutoSpeedLevel = AUTO_DEFAULT_SPEED;
+static uint8_t SpeedLimitLevel = AUTO_MAX_SPEED;
+static float SteerMinAngle = 0.0f;
+static float SteerMaxAngle = 180.0f;
+static uint8_t ActiveMotionValid = 0;
+static uint16_t ActiveMotionSeq = 0;
+static char ActiveMotionName[8] = "";
+static float YawReportOffset = 0.0f;
+static uint8_t ProtocolQuiet = 0;
 
 void ExDirect(uint8_t Rot);
 void SetSpeedRank(int8_t level);
 void Set_Straight(void);
+static void RefreshCommandWatchdog(void);
+static void SetStandbyMode(void);
+static void SetManualMode(void);
+static uint8_t StartDistanceDrive(float distanceCm);
+static uint8_t StartYawTurn(float relativeYawDeg);
+static uint8_t StartArcDrive(float distanceCm, float steerDeg);
+static uint8_t StartAutoRoute(void);
 
 static uint8_t IsDigitChar(char c)
 {
@@ -200,6 +220,806 @@ static float GetYawError(float target, float current)
 	return NormalizeYaw(target - current);
 }
 
+static float GetReportedYaw(void)
+{
+	return NormalizeYaw(New_Yaw - YawReportOffset);
+}
+
+static const char *ControlModeName(void)
+{
+	switch(ControlMode)
+	{
+	case CTRL_IDLE: return "IDLE";
+	case CTRL_MANUAL: return "MANUAL";
+	case CTRL_STRAIGHT: return "STRAIGHT";
+	case CTRL_DISTANCE: return "DISTANCE";
+	case CTRL_TURN_YAW: return "TURN";
+	case CTRL_ARC: return "ARC";
+	case CTRL_AUTO_ROUTE: return "AUTO";
+	default: return "UNKNOWN";
+	}
+}
+
+static const char *RunStateName(void)
+{
+	switch(rS)
+	{
+	case STANDBY: return "STANDBY";
+	case PARKING: return "PARKING";
+	case HITTED: return "HITTED";
+	default: return "UNKNOWN";
+	}
+}
+
+static void CopySmallText(char *dest, const char *src, uint8_t destSize)
+{
+	uint8_t i = 0;
+
+	if(destSize == 0)
+	{
+		return;
+	}
+
+	while(i < (uint8_t)(destSize - 1) && src[i] != '\0')
+	{
+		dest[i] = src[i];
+		i++;
+	}
+	dest[i] = '\0';
+}
+
+static void ReplyAck(uint16_t seq, const char *cmd)
+{
+	if(seq > 0)
+	{
+		USART3_printf("ACK %u %s\r\n", seq, cmd);
+	}
+	else
+	{
+		USART3_printf("ACK %s\r\n", cmd);
+	}
+}
+
+static void ReplyDone(uint16_t seq, const char *cmd, const char *extra)
+{
+	if(extra == 0 || extra[0] == '\0')
+	{
+		if(seq > 0)
+		{
+			USART3_printf("DONE %u %s\r\n", seq, cmd);
+		}
+		else
+		{
+			USART3_printf("DONE %s\r\n", cmd);
+		}
+	}
+	else if(seq > 0)
+	{
+		USART3_printf("DONE %u %s %s\r\n", seq, cmd, extra);
+	}
+	else
+	{
+		USART3_printf("DONE %s %s\r\n", cmd, extra);
+	}
+}
+
+static void ReplyErr(uint16_t seq, const char *code)
+{
+	if(seq > 0)
+	{
+		USART3_printf("ERR %u CODE=%s\r\n", seq, code);
+	}
+	else
+	{
+		USART3_printf("ERR CODE=%s\r\n", code);
+	}
+}
+
+static void TrackActiveMotion(uint16_t seq, const char *cmd)
+{
+	ActiveMotionValid = 1;
+	ActiveMotionSeq = seq;
+	CopySmallText(ActiveMotionName, cmd, sizeof(ActiveMotionName));
+}
+
+static void FinishActiveMotionOk(const char *extra)
+{
+	if(ActiveMotionValid)
+	{
+		ReplyDone(ActiveMotionSeq, ActiveMotionName, extra);
+		ActiveMotionValid = 0;
+		ActiveMotionSeq = 0;
+		ActiveMotionName[0] = '\0';
+	}
+}
+
+static void FinishActiveMotionErr(const char *code)
+{
+	if(ActiveMotionValid)
+	{
+		ReplyErr(ActiveMotionSeq, code);
+		ActiveMotionValid = 0;
+		ActiveMotionSeq = 0;
+		ActiveMotionName[0] = '\0';
+	}
+}
+
+static void SetSteeringAngle(float angle)
+{
+	Angle = ClampFloat(angle, SteerMinAngle, SteerMaxAngle);
+	SetServoRotation(Angle);
+}
+
+static uint8_t IsSpaceChar(char c)
+{
+	return (c == ' ' || c == '\t');
+}
+
+static uint8_t TokenizeCommand(char *buffer, char *tokens[], uint8_t maxTokens)
+{
+	uint8_t count = 0;
+	char *p = buffer;
+
+	while(*p != '\0' && count < maxTokens)
+	{
+		while(IsSpaceChar(*p))
+		{
+			p++;
+		}
+		if(*p == '\0')
+		{
+			break;
+		}
+		tokens[count++] = p;
+		while(*p != '\0' && !IsSpaceChar(*p))
+		{
+			p++;
+		}
+		if(*p != '\0')
+		{
+			*p = '\0';
+			p++;
+		}
+	}
+	return count;
+}
+
+static uint8_t IsUnsignedIntegerToken(const char *token)
+{
+	if(token == 0 || *token == '\0')
+	{
+		return 0;
+	}
+	while(*token != '\0')
+	{
+		if(!IsDigitChar(*token))
+		{
+			return 0;
+		}
+		token++;
+	}
+	return 1;
+}
+
+static uint8_t ParseSeqToken(const char *token, uint16_t *seq)
+{
+	uint32_t value = 0;
+
+	if(!IsUnsignedIntegerToken(token))
+	{
+		return 0;
+	}
+	while(*token != '\0')
+	{
+		value = value * 10U + (uint32_t)(*token - '0');
+		if(value > 65535U)
+		{
+			return 0;
+		}
+		token++;
+	}
+	*seq = (uint16_t)value;
+	return 1;
+}
+
+static const char *FindKeyValue(char *tokens[], uint8_t count, const char *key)
+{
+	uint8_t i;
+	uint16_t keyLen = (uint16_t)strlen(key);
+
+	for(i = 0; i < count; i++)
+	{
+		if(strncmp(tokens[i], key, keyLen) == 0 && tokens[i][keyLen] == '=')
+		{
+			return &tokens[i][keyLen + 1U];
+		}
+	}
+	return 0;
+}
+
+static uint8_t GetFloatArg(char *tokens[], uint8_t count, const char *key, float *value)
+{
+	const char *text = FindKeyValue(tokens, count, key);
+
+	if(text == 0)
+	{
+		return 0;
+	}
+	return ParseCommandValue(text, value, 0);
+}
+
+static uint8_t GetSpeedArg(char *tokens[], uint8_t count, uint8_t *speed)
+{
+	float value = 0.0f;
+
+	if(!GetFloatArg(tokens, count, "V", &value))
+	{
+		*speed = (AutoSpeedLevel > SpeedLimitLevel) ? SpeedLimitLevel : AutoSpeedLevel;
+		return 1;
+	}
+	if(value < 0.0f || value > (float)SpeedLimitLevel)
+	{
+		return 0;
+	}
+	*speed = (uint8_t)value;
+	return 1;
+}
+
+static void PrintStatusV2(uint16_t seq)
+{
+	Odometry_t snapshot;
+	uint8_t dropped;
+
+	Odometry_GetSnapshot(&snapshot);
+	dropped = USART3_GetDroppedTextCount();
+	if(seq > 0)
+	{
+		USART3_printf("STAT %u MODE=%s RUN=%s DIR=%d SPD=%d ANG=%.1f YAW=%.1f X=%.1f Y=%.1f D=%.1f VEL=%.1f DROP=%u\r\n",
+		              seq, ControlModeName(), RunStateName(), is_up, SpeedRank, Angle,
+		              GetReportedYaw(), snapshot.x, snapshot.y, snapshot.distance, aveSpeed, dropped);
+	}
+	else
+	{
+		USART3_printf("STAT MODE=%s RUN=%s DIR=%d SPD=%d ANG=%.1f YAW=%.1f X=%.1f Y=%.1f D=%.1f VEL=%.1f DROP=%u\r\n",
+		              ControlModeName(), RunStateName(), is_up, SpeedRank, Angle,
+		              GetReportedYaw(), snapshot.x, snapshot.y, snapshot.distance, aveSpeed, dropped);
+	}
+}
+
+static void PrintPwmStatusV2(uint16_t seq)
+{
+	if(seq > 0)
+	{
+		USART3_printf("PWM %u HEALTH=%u ANG=%.1f PULSE=%u PSC=%u ARR=%u CCR2=%u CCER=0x%04x\r\n",
+		              seq, ServoPWM_IsHealthy(), ServoPWM_GetLastAngle(), ServoPWM_GetPulseUs(),
+		              ServoPWM_GetPsc(), ServoPWM_GetArr(), ServoPWM_GetCcr2(), ServoPWM_GetCcer());
+	}
+	else
+	{
+		USART3_printf("PWM HEALTH=%u ANG=%.1f PULSE=%u PSC=%u ARR=%u CCR2=%u CCER=0x%04x\r\n",
+		              ServoPWM_IsHealthy(), ServoPWM_GetLastAngle(), ServoPWM_GetPulseUs(),
+		              ServoPWM_GetPsc(), ServoPWM_GetArr(), ServoPWM_GetCcr2(), ServoPWM_GetCcer());
+	}
+}
+
+static void PrintParamV2(uint16_t seq, const char *param)
+{
+	if(strcmp(param, "HEADING") == 0)
+	{
+		if(seq > 0)
+		{
+			USART3_printf("PARAM %u HEADING KP=%.4f KI=%.4f KD=%.4f MAXI=%.2f MAXOUT=%.2f DEAD=%.2f CROSS=%.2f\r\n",
+			              seq, headingPID.Kp, headingPID.Ki, headingPID.Kd, headingPID.MaxI,
+			              headingPID.MaxOut, headingPID.Deadband, headingPID.CrossTrackKp);
+		}
+		else
+		{
+			USART3_printf("PARAM HEADING KP=%.4f KI=%.4f KD=%.4f MAXI=%.2f MAXOUT=%.2f DEAD=%.2f CROSS=%.2f\r\n",
+			              headingPID.Kp, headingPID.Ki, headingPID.Kd, headingPID.MaxI,
+			              headingPID.MaxOut, headingPID.Deadband, headingPID.CrossTrackKp);
+		}
+	}
+	else if(strcmp(param, "MOTOR") == 0)
+	{
+		if(seq > 0)
+		{
+			USART3_printf("PARAM %u MOTOR RKP=%.4f RKI=%.4f RKD=%.4f LKP=%.4f LKI=%.4f LKD=%.4f\r\n",
+			              seq, rSpeed_PID.Kp, rSpeed_PID.Ki, rSpeed_PID.Kd,
+			              lSpeed_PID.Kp, lSpeed_PID.Ki, lSpeed_PID.Kd);
+		}
+		else
+		{
+			USART3_printf("PARAM MOTOR RKP=%.4f RKI=%.4f RKD=%.4f LKP=%.4f LKI=%.4f LKD=%.4f\r\n",
+			              rSpeed_PID.Kp, rSpeed_PID.Ki, rSpeed_PID.Kd,
+			              lSpeed_PID.Kp, lSpeed_PID.Ki, lSpeed_PID.Kd);
+		}
+	}
+	else if(strcmp(param, "LIMIT") == 0 || strcmp(param, "SERVO") == 0)
+	{
+		if(seq > 0)
+		{
+			USART3_printf("PARAM %u LIMIT STE_MIN=%.1f STE_MAX=%.1f SPEED_MAX=%u\r\n",
+			              seq, SteerMinAngle, SteerMaxAngle, SpeedLimitLevel);
+		}
+		else
+		{
+			USART3_printf("PARAM LIMIT STE_MIN=%.1f STE_MAX=%.1f SPEED_MAX=%u\r\n",
+			              SteerMinAngle, SteerMaxAngle, SpeedLimitLevel);
+		}
+	}
+	else
+	{
+		ReplyErr(seq, "BAD_PARAM");
+	}
+}
+
+static uint8_t ApplyHeadingParams(char *tokens[], uint8_t count)
+{
+	float value;
+	uint8_t changed = 0;
+
+	if(GetFloatArg(tokens, count, "KP", &value)) { headingPID.Kp = value; changed = 1; }
+	if(GetFloatArg(tokens, count, "KI", &value)) { headingPID.Ki = value; changed = 1; }
+	if(GetFloatArg(tokens, count, "KD", &value)) { headingPID.Kd = value; changed = 1; }
+	if(GetFloatArg(tokens, count, "MAXI", &value)) { headingPID.MaxI = value; changed = 1; }
+	if(GetFloatArg(tokens, count, "MAXOUT", &value)) { headingPID.MaxOut = value; changed = 1; }
+	if(GetFloatArg(tokens, count, "DEAD", &value)) { headingPID.Deadband = value; changed = 1; }
+	if(GetFloatArg(tokens, count, "D_ALPHA", &value)) { headingPID.D_Alpha = ClampFloat(value, 0.0f, 1.0f); changed = 1; }
+	if(GetFloatArg(tokens, count, "SMOOTH", &value)) { headingPID.SmoothAlpha = ClampFloat(value, 0.0f, 1.0f); changed = 1; }
+	if(GetFloatArg(tokens, count, "CROSS", &value)) { headingPID.CrossTrackKp = value; changed = 1; }
+	if(GetFloatArg(tokens, count, "CROSS_EN", &value)) { headingPID.CrossTrackEnable = (value != 0.0f); changed = 1; }
+	if(changed)
+	{
+		HeadingPID_Reset(&headingPID);
+	}
+	return changed;
+}
+
+static uint8_t ApplyMotorParams(char *tokens[], uint8_t count)
+{
+	float value;
+	uint8_t changed = 0;
+
+	if(GetFloatArg(tokens, count, "KP", &value))
+	{
+		rSpeed_PID.Kp = value;
+		lSpeed_PID.Kp = value;
+		changed = 1;
+	}
+	if(GetFloatArg(tokens, count, "KI", &value))
+	{
+		rSpeed_PID.Ki = value;
+		lSpeed_PID.Ki = value;
+		changed = 1;
+	}
+	if(GetFloatArg(tokens, count, "KD", &value))
+	{
+		rSpeed_PID.Kd = value;
+		lSpeed_PID.Kd = value;
+		changed = 1;
+	}
+	if(GetFloatArg(tokens, count, "RKP", &value)) { rSpeed_PID.Kp = value; changed = 1; }
+	if(GetFloatArg(tokens, count, "RKI", &value)) { rSpeed_PID.Ki = value; changed = 1; }
+	if(GetFloatArg(tokens, count, "RKD", &value)) { rSpeed_PID.Kd = value; changed = 1; }
+	if(GetFloatArg(tokens, count, "LKP", &value)) { lSpeed_PID.Kp = value; changed = 1; }
+	if(GetFloatArg(tokens, count, "LKI", &value)) { lSpeed_PID.Ki = value; changed = 1; }
+	if(GetFloatArg(tokens, count, "LKD", &value)) { lSpeed_PID.Kd = value; changed = 1; }
+	if(changed)
+	{
+		InitAll();
+	}
+	return changed;
+}
+
+static uint8_t ApplyLimitParams(char *tokens[], uint8_t count)
+{
+	float value;
+	float newMin = SteerMinAngle;
+	float newMax = SteerMaxAngle;
+	uint8_t changed = 0;
+
+	if(GetFloatArg(tokens, count, "STE_MIN", &value))
+	{
+		newMin = ClampFloat(value, 0.0f, 180.0f);
+		changed = 1;
+	}
+	if(GetFloatArg(tokens, count, "STE_MAX", &value))
+	{
+		newMax = ClampFloat(value, 0.0f, 180.0f);
+		changed = 1;
+	}
+	if(newMin >= newMax)
+	{
+		return 0;
+	}
+	SteerMinAngle = newMin;
+	SteerMaxAngle = newMax;
+	if(GetFloatArg(tokens, count, "SPEED_MAX", &value))
+	{
+		if(value < 0.0f || value > (float)AUTO_MAX_SPEED)
+		{
+			return 0;
+		}
+		SpeedLimitLevel = (uint8_t)value;
+		if(AutoSpeedLevel > SpeedLimitLevel)
+		{
+			AutoSpeedLevel = SpeedLimitLevel;
+		}
+		if(ABS(SpeedRank) > (int16_t)(SpeedLimitLevel * SPEEDSTEP))
+		{
+			SpeedRank = ABSTRACT(SpeedRank) * (int16_t)(SpeedLimitLevel * SPEEDSTEP);
+		}
+		changed = 1;
+	}
+	SetSteeringAngle(Angle);
+	return changed;
+}
+
+static void RestoreDefaultRuntimeConfig(void)
+{
+	headingPID.Kp = 2.5f;
+	headingPID.Ki = 0.01f;
+	headingPID.Kd = 0.18f;
+	headingPID.MaxI = 5.0f;
+	headingPID.MaxOut = 8.0f;
+	headingPID.Deadband = 2.0f;
+	headingPID.D_Alpha = 0.7f;
+	headingPID.SmoothAlpha = 0.4f;
+	headingPID.CrossTrackKp = 2.0f;
+	rSpeed_PID.Kp = KP;
+	rSpeed_PID.Ki = KI;
+	rSpeed_PID.Kd = KD;
+	lSpeed_PID.Kp = KP;
+	lSpeed_PID.Ki = KI;
+	lSpeed_PID.Kd = KD;
+	SpeedLimitLevel = AUTO_MAX_SPEED;
+	AutoSpeedLevel = AUTO_DEFAULT_SPEED;
+	SteerMinAngle = 0.0f;
+	SteerMaxAngle = 180.0f;
+	InitAll();
+	HeadingPID_Reset(&headingPID);
+	SetSteeringAngle(90.0f);
+}
+
+static uint8_t IsV2CommandName(const char *token)
+{
+	return (strcmp(token, "PING") == 0 ||
+	        strcmp(token, "VER") == 0 ||
+	        strcmp(token, "STAT") == 0 ||
+	        strcmp(token, "PWM_STAT") == 0 ||
+	        strcmp(token, "TEL") == 0 ||
+	        strcmp(token, "STOP") == 0 ||
+	        strcmp(token, "CANCEL") == 0 ||
+	        strcmp(token, "MODE") == 0 ||
+	        strcmp(token, "SERVO") == 0 ||
+	        strcmp(token, "MOVE") == 0 ||
+	        strcmp(token, "TURN") == 0 ||
+	        strcmp(token, "ARC") == 0 ||
+	        strcmp(token, "AUTO") == 0 ||
+	        strcmp(token, "ZERO_ODOM") == 0 ||
+	        strcmp(token, "ZERO_YAW") == 0 ||
+	        strcmp(token, "ZERO_ALL") == 0 ||
+	        strcmp(token, "GET") == 0 ||
+	        strcmp(token, "SET") == 0 ||
+	        strcmp(token, "SAVE_CFG") == 0 ||
+	        strcmp(token, "LOAD_CFG") == 0 ||
+	        strcmp(token, "DEFAULT_CFG") == 0);
+}
+
+static uint8_t IsV2Candidate(const char *buffer)
+{
+	char token[16];
+	uint8_t i = 0;
+
+	while(IsSpaceChar(*buffer))
+	{
+		buffer++;
+	}
+	if(IsDigitChar(*buffer))
+	{
+		return 1;
+	}
+	while(buffer[i] != '\0' && !IsSpaceChar(buffer[i]) && i < (uint8_t)(sizeof(token) - 1U))
+	{
+		token[i] = buffer[i];
+		i++;
+	}
+	token[i] = '\0';
+	return IsV2CommandName(token);
+}
+
+static uint8_t HandleV2Command(char *pBuffer)
+{
+	char *tokens[16];
+	uint8_t count;
+	uint8_t cmdIndex = 0;
+	uint16_t seq = 0;
+	const char *cmd;
+	const char *param;
+	const char *mode;
+	float value;
+	float steer;
+	uint8_t speed;
+
+	count = TokenizeCommand(pBuffer, tokens, 16);
+	if(count == 0)
+	{
+		return 1;
+	}
+
+	if(IsUnsignedIntegerToken(tokens[0]))
+	{
+		if(!ParseSeqToken(tokens[0], &seq) || count < 2)
+		{
+			ReplyErr(seq, "BAD_SEQ");
+			return 1;
+		}
+		cmdIndex = 1;
+	}
+
+	cmd = tokens[cmdIndex];
+	if(!IsV2CommandName(cmd))
+	{
+		ReplyErr(seq, "BAD_CMD");
+		return 1;
+	}
+
+	if(strcmp(cmd, "PING") == 0)
+	{
+		ReplyDone(seq, "PING", "PONG");
+	}
+	else if(strcmp(cmd, "VER") == 0)
+	{
+		if(seq > 0)
+		{
+			USART3_printf("VER %u FW=%s BAUD=9600 PROTO=2\r\n", seq, FIRMWARE_VERSION);
+		}
+		else
+		{
+			USART3_printf("VER FW=%s BAUD=9600 PROTO=2\r\n", FIRMWARE_VERSION);
+		}
+	}
+	else if(strcmp(cmd, "STAT") == 0)
+	{
+		PrintStatusV2(seq);
+	}
+	else if(strcmp(cmd, "PWM_STAT") == 0)
+	{
+		PrintPwmStatusV2(seq);
+	}
+	else if(strcmp(cmd, "TEL") == 0)
+	{
+		if(count <= (uint8_t)(cmdIndex + 1U))
+		{
+			ReplyErr(seq, "BAD_ARG");
+		}
+		else if(strcmp(tokens[cmdIndex + 1U], "ON") == 0 || strcmp(tokens[cmdIndex + 1U], "1") == 0)
+		{
+			TelemetryEnabled = 1;
+			ReplyDone(seq, "TEL", "ON");
+		}
+		else if(strcmp(tokens[cmdIndex + 1U], "OFF") == 0 || strcmp(tokens[cmdIndex + 1U], "0") == 0)
+		{
+			TelemetryEnabled = 0;
+			ReplyDone(seq, "TEL", "OFF");
+		}
+		else
+		{
+			ReplyErr(seq, "BAD_ARG");
+		}
+	}
+	else if(strcmp(cmd, "STOP") == 0 || strcmp(cmd, "CANCEL") == 0)
+	{
+		SetStandbyMode();
+		FinishActiveMotionErr("CANCELED");
+		ReplyDone(seq, cmd, "");
+	}
+	else if(strcmp(cmd, "MODE") == 0)
+	{
+		mode = FindKeyValue(tokens, count, "M");
+		if(mode == 0)
+		{
+			ReplyErr(seq, "BAD_ARG");
+		}
+		else if(strcmp(mode, "MANUAL") == 0)
+		{
+			SetManualMode();
+			FinishActiveMotionErr("CANCELED");
+			ReplyDone(seq, "MODE", "M=MANUAL");
+		}
+		else if(strcmp(mode, "IDLE") == 0 || strcmp(mode, "STANDBY") == 0)
+		{
+			SetStandbyMode();
+			FinishActiveMotionErr("CANCELED");
+			ReplyDone(seq, "MODE", "M=IDLE");
+		}
+		else
+		{
+			ReplyErr(seq, "BAD_MODE");
+		}
+	}
+	else if(strcmp(cmd, "SERVO") == 0)
+	{
+		if(!GetFloatArg(tokens, count, "A", &value) && !GetFloatArg(tokens, count, "ANG", &value))
+		{
+			ReplyErr(seq, "BAD_ARG");
+		}
+		else
+		{
+			SetManualMode();
+			FinishActiveMotionErr("CANCELED");
+			SetSteeringAngle(value);
+			ReplyDone(seq, "SERVO", "");
+		}
+	}
+	else if(strcmp(cmd, "MOVE") == 0)
+	{
+		if(!GetFloatArg(tokens, count, "D", &value) || !GetSpeedArg(tokens, count, &speed))
+		{
+			ReplyErr(seq, "BAD_ARG");
+		}
+		else
+		{
+			AutoSpeedLevel = speed;
+			SpeedRank = 0;
+			ProtocolQuiet = 1;
+			if(StartDistanceDrive(value))
+			{
+				ProtocolQuiet = 0;
+				TrackActiveMotion(seq, "MOVE");
+				ReplyAck(seq, "MOVE");
+			}
+			else
+			{
+				ProtocolQuiet = 0;
+				ReplyErr(seq, "BAD_ARG");
+			}
+		}
+	}
+	else if(strcmp(cmd, "TURN") == 0)
+	{
+		if(!GetFloatArg(tokens, count, "A", &value) || !GetSpeedArg(tokens, count, &speed))
+		{
+			ReplyErr(seq, "BAD_ARG");
+		}
+		else
+		{
+			AutoSpeedLevel = speed;
+			SpeedRank = 0;
+			ProtocolQuiet = 1;
+			if(StartYawTurn(value))
+			{
+				ProtocolQuiet = 0;
+				TrackActiveMotion(seq, "TURN");
+				ReplyAck(seq, "TURN");
+			}
+			else
+			{
+				ProtocolQuiet = 0;
+				ReplyErr(seq, "BAD_ARG");
+			}
+		}
+	}
+	else if(strcmp(cmd, "ARC") == 0)
+	{
+		if(!GetFloatArg(tokens, count, "D", &value) ||
+		   !GetFloatArg(tokens, count, "STE", &steer) ||
+		   !GetSpeedArg(tokens, count, &speed))
+		{
+			ReplyErr(seq, "BAD_ARG");
+		}
+		else
+		{
+			AutoSpeedLevel = speed;
+			SpeedRank = 0;
+			ProtocolQuiet = 1;
+			if(StartArcDrive(value, steer))
+			{
+				ProtocolQuiet = 0;
+				TrackActiveMotion(seq, "ARC");
+				ReplyAck(seq, "ARC");
+			}
+			else
+			{
+				ProtocolQuiet = 0;
+				ReplyErr(seq, "BAD_ARG");
+			}
+		}
+	}
+	else if(strcmp(cmd, "AUTO") == 0)
+	{
+		AutoSpeedLevel = AUTO_DEFAULT_SPEED;
+		SpeedRank = 0;
+		ProtocolQuiet = 1;
+		if(StartAutoRoute())
+		{
+			ProtocolQuiet = 0;
+			TrackActiveMotion(seq, "AUTO");
+			ReplyAck(seq, "AUTO");
+		}
+		else
+		{
+			ProtocolQuiet = 0;
+			ReplyErr(seq, "AUTO_FAIL");
+		}
+	}
+	else if(strcmp(cmd, "ZERO_ODOM") == 0)
+	{
+		Odometry_Reset();
+		ReplyDone(seq, "ZERO_ODOM", "");
+	}
+	else if(strcmp(cmd, "ZERO_YAW") == 0)
+	{
+		YawReportOffset = New_Yaw;
+		Org_Yaw = New_Yaw;
+		TargetYaw = New_Yaw;
+		ReplyDone(seq, "ZERO_YAW", "");
+	}
+	else if(strcmp(cmd, "ZERO_ALL") == 0)
+	{
+		Odometry_Reset();
+		YawReportOffset = New_Yaw;
+		Org_Yaw = New_Yaw;
+		TargetYaw = New_Yaw;
+		ReplyDone(seq, "ZERO_ALL", "");
+	}
+	else if(strcmp(cmd, "GET") == 0)
+	{
+		param = FindKeyValue(tokens, count, "PARAM");
+		if(param == 0)
+		{
+			ReplyErr(seq, "BAD_ARG");
+		}
+		else
+		{
+			PrintParamV2(seq, param);
+		}
+	}
+	else if(strcmp(cmd, "SET") == 0)
+	{
+		param = FindKeyValue(tokens, count, "PARAM");
+		if(param == 0)
+		{
+			ReplyErr(seq, "BAD_ARG");
+		}
+		else if(strcmp(param, "HEADING") == 0)
+		{
+			if(ApplyHeadingParams(tokens, count)) ReplyDone(seq, "SET", "PARAM=HEADING");
+			else ReplyErr(seq, "BAD_ARG");
+		}
+		else if(strcmp(param, "MOTOR") == 0)
+		{
+			if(ApplyMotorParams(tokens, count)) ReplyDone(seq, "SET", "PARAM=MOTOR");
+			else ReplyErr(seq, "BAD_ARG");
+		}
+		else if(strcmp(param, "LIMIT") == 0 || strcmp(param, "SERVO") == 0)
+		{
+			if(ApplyLimitParams(tokens, count)) ReplyDone(seq, "SET", "PARAM=LIMIT");
+			else ReplyErr(seq, "BAD_ARG");
+		}
+		else
+		{
+			ReplyErr(seq, "BAD_PARAM");
+		}
+	}
+	else if(strcmp(cmd, "DEFAULT_CFG") == 0)
+	{
+		RestoreDefaultRuntimeConfig();
+		ReplyDone(seq, "DEFAULT_CFG", "");
+	}
+	else if(strcmp(cmd, "SAVE_CFG") == 0 || strcmp(cmd, "LOAD_CFG") == 0)
+	{
+		ReplyErr(seq, "UNSUPPORTED");
+	}
+	else
+	{
+		ReplyErr(seq, "BAD_CMD");
+	}
+
+	RefreshCommandWatchdog();
+	return 1;
+}
+
 static void RefreshCommandWatchdog(void)
 {
 	LastCommandTick = ControlTicks;
@@ -207,8 +1027,7 @@ static void RefreshCommandWatchdog(void)
 
 static void CenterSteering(void)
 {
-	Angle = 90.0f;
-	SetServoRotation(Angle);
+	SetSteeringAngle(90.0f);
 }
 
 static void HardStopMotion(void)
@@ -224,6 +1043,15 @@ static void HardStopMotion(void)
 	ControlMode = CTRL_IDLE;
 }
 
+static void PrintTelemetry(void)
+{
+	Odometry_t snapshot;
+	Odometry_GetSnapshot(&snapshot);
+	USART3_printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\r\n",
+	              MM.GyroX/16.4f, GetReportedYaw(), Angle, aveSpeed, snapshot.x, snapshot.y,
+	              headingPID.Kp, headingPID.Ki, headingPID.Kd);
+}
+
 static void SetStandbyMode(void)
 {
 	HardStopMotion();
@@ -233,7 +1061,7 @@ static void SetStandbyMode(void)
 
 static void SetManualMode(void)
 {
-	if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW)
+	if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW || ControlMode == CTRL_ARC)
 	{
 		AutoStep = AUTO_IDLE;
 	}
@@ -253,6 +1081,10 @@ static void SetManualModeIfIdle(void)
 
 static void EnsureAutoSpeed(void)
 {
+	if(AutoSpeedLevel > SpeedLimitLevel)
+	{
+		AutoSpeedLevel = SpeedLimitLevel;
+	}
 	if(SpeedRank == 0)
 	{
 		SetSpeedRank(AutoSpeedLevel);
@@ -303,12 +1135,18 @@ static uint8_t StartDistanceDrive(float distanceCm)
 	{
 		ControlMode = CTRL_DISTANCE;
 		AutoStep = AUTO_IDLE;
-		USART3_printf("Distance drive %.1f cm\r\n", TargetDistanceCm);
+		if(!ProtocolQuiet)
+		{
+			USART3_printf("Distance drive %.1f cm\r\n", TargetDistanceCm);
+		}
 		return 1;
 	}
 	else
 	{
-		USART3_printf("Invalid distance target!\r\n");
+		if(!ProtocolQuiet)
+		{
+			USART3_printf("Invalid distance target!\r\n");
+		}
 		return 0;
 	}
 }
@@ -335,14 +1173,64 @@ static uint8_t StartYawTurn(float relativeYawDeg)
 	{
 		ControlMode = CTRL_TURN_YAW;
 		AutoStep = AUTO_IDLE;
-		USART3_printf("Yaw turn %.1f deg\r\n", relativeYawDeg);
+		if(!ProtocolQuiet)
+		{
+			USART3_printf("Yaw turn %.1f deg\r\n", relativeYawDeg);
+		}
 		return 1;
 	}
 	else
 	{
-		USART3_printf("Invalid yaw target!\r\n");
+		if(!ProtocolQuiet)
+		{
+			USART3_printf("Invalid yaw target!\r\n");
+		}
 		return 0;
 	}
+}
+
+static uint8_t StartArcDrive(float distanceCm, float steerDeg)
+{
+	if(AbsFloat(distanceCm) < 1.0f)
+	{
+		if(!ProtocolQuiet)
+		{
+			USART3_printf("Invalid arc distance!\r\n");
+		}
+		return 0;
+	}
+
+	if(distanceCm < 0.0f)
+	{
+		if(is_up == 1)
+		{
+			ExDirect(0);
+		}
+		TargetDistanceCm = -distanceCm;
+	}
+	else
+	{
+		if(is_up == -1)
+		{
+			ExDirect(1);
+		}
+		TargetDistanceCm = distanceCm;
+	}
+
+	is_straight = 0;
+	is_turn = 0;
+	headingPID.CrossTrackEnable = 0;
+	SetSteeringAngle(steerDeg);
+	Odometry_Reset();
+	ActionStartTick = ControlTicks;
+	EnsureAutoSpeed();
+	ControlMode = CTRL_ARC;
+	AutoStep = AUTO_IDLE;
+	if(!ProtocolQuiet)
+	{
+		USART3_printf("Arc drive %.1f cm steer %.1f deg\r\n", TargetDistanceCm, Angle);
+	}
+	return 1;
 }
 
 static uint8_t StartAutoRoute(void)
@@ -354,13 +1242,19 @@ static uint8_t StartAutoRoute(void)
 	AutoStep = AUTO_FORWARD1;
 	if(PrepareDistanceDrive(AUTO_FORWARD1_CM))
 	{
-		USART3_printf("Auto route start\r\n");
+		if(!ProtocolQuiet)
+		{
+			USART3_printf("Auto route start\r\n");
+		}
 		return 1;
 	}
 	else
 	{
 		SetStandbyMode();
-		USART3_printf("Auto route failed\r\n");
+		if(!ProtocolQuiet)
+		{
+			USART3_printf("Auto route failed\r\n");
+		}
 		return 0;
 	}
 }
@@ -400,8 +1294,7 @@ static uint8_t UpdateYawTurn(void)
 		correction = -correction;
 	}
 
-	Angle = ClampFloat(90.0f + correction, 0.0f, 180.0f);
-	SetServoRotation(Angle);
+	SetSteeringAngle(90.0f + correction);
 	EnsureAutoSpeed();
 	return 0;
 }
@@ -417,12 +1310,16 @@ static void UpdateControlTask(void)
 		return;
 	}
 
-	if((ControlMode == CTRL_DISTANCE ||
+	if((ControlMode == CTRL_DISTANCE || ControlMode == CTRL_ARC ||
 	   (ControlMode == CTRL_AUTO_ROUTE && (AutoStep == AUTO_FORWARD1 || AutoStep == AUTO_FORWARD2))) &&
 	   (uint32_t)(ControlTicks - ActionStartTick) > DISTANCE_TIMEOUT_MS)
 	{
 		SetStandbyMode();
-		USART3_printf("Distance timeout stop!\r\n");
+		if(!ActiveMotionValid)
+		{
+			USART3_printf("Distance timeout stop!\r\n");
+		}
+		FinishActiveMotionErr("TIMEOUT");
 		return;
 	}
 
@@ -431,7 +1328,11 @@ static void UpdateControlTask(void)
 	   (uint32_t)(ControlTicks - ActionStartTick) > TURN_TIMEOUT_MS)
 	{
 		SetStandbyMode();
-		USART3_printf("Turn timeout stop!\r\n");
+		if(!ActiveMotionValid)
+		{
+			USART3_printf("Turn timeout stop!\r\n");
+		}
+		FinishActiveMotionErr("TIMEOUT");
 		return;
 	}
 
@@ -440,7 +1341,23 @@ static void UpdateControlTask(void)
 		if(UpdateDistanceDrive())
 		{
 			SetStandbyMode();
-			USART3_printf("Distance done\r\n");
+			if(!ActiveMotionValid)
+			{
+				USART3_printf("Distance done\r\n");
+			}
+			FinishActiveMotionOk("");
+		}
+	}
+	else if(ControlMode == CTRL_ARC)
+	{
+		if(UpdateDistanceDrive())
+		{
+			SetStandbyMode();
+			if(!ActiveMotionValid)
+			{
+				USART3_printf("Arc done\r\n");
+			}
+			FinishActiveMotionOk("");
 		}
 	}
 	else if(ControlMode == CTRL_TURN_YAW)
@@ -448,7 +1365,11 @@ static void UpdateControlTask(void)
 		if(UpdateYawTurn())
 		{
 			SetStandbyMode();
-			USART3_printf("Yaw turn done\r\n");
+			if(!ActiveMotionValid)
+			{
+				USART3_printf("Yaw turn done\r\n");
+			}
+			FinishActiveMotionOk("");
 		}
 	}
 	else if(ControlMode == CTRL_AUTO_ROUTE)
@@ -465,7 +1386,11 @@ static void UpdateControlTask(void)
 				else
 				{
 					SetStandbyMode();
-					USART3_printf("Auto turn failed\r\n");
+					if(!ActiveMotionValid)
+					{
+						USART3_printf("Auto turn failed\r\n");
+					}
+					FinishActiveMotionErr("AUTO_TURN_FAIL");
 				}
 			}
 		}
@@ -480,7 +1405,11 @@ static void UpdateControlTask(void)
 				else
 				{
 					SetStandbyMode();
-					USART3_printf("Auto forward failed\r\n");
+					if(!ActiveMotionValid)
+					{
+						USART3_printf("Auto forward failed\r\n");
+					}
+					FinishActiveMotionErr("AUTO_FORWARD_FAIL");
 				}
 			}
 		}
@@ -491,7 +1420,11 @@ static void UpdateControlTask(void)
 				SetStandbyMode();
 				rS = PARKING;
 				SetLEDs(GPIO_Pin_12);
-				USART3_printf("Auto route done\r\n");
+				if(!ActiveMotionValid)
+				{
+					USART3_printf("Auto route done\r\n");
+				}
+				FinishActiveMotionOk("");
 			}
 		}
 	}
@@ -548,7 +1481,15 @@ void ExDirect(uint8_t Rot)
 //一共有6档,默认低速3档(平稳移动),456逐步加速
 void SetSpeedRank(int8_t level)
 {
-	if(level < 7 && level > -1)
+	if(level < 0)
+	{
+		level = 0;
+	}
+	if((uint8_t)level > SpeedLimitLevel)
+	{
+		level = (int8_t)SpeedLimitLevel;
+	}
+	if(level < 7)
 	{
 		SpeedRank = is_up*level*SPEEDSTEP;
 	}
@@ -678,13 +1619,19 @@ void keep_straight()
 	// // 限幅保护
 	// if(Angle > 90.0f + headingPID.MaxOut) Angle = 90.0f + headingPID.MaxOut;
 	// if(Angle < 90.0f - headingPID.MaxOut) Angle = 90.0f - headingPID.MaxOut;
-	SetServoRotation(Angle);
+	SetSteeringAngle(Angle);
 }
 
 static void HandleTextCommand(char *pBuffer)
 {
 	float value = 0.0f;
 	uint8_t commandAccepted = 0;
+
+	if(IsV2Candidate(pBuffer))
+	{
+		HandleV2Command(pBuffer);
+		return;
+	}
 
 	if(strcmp((const char *)pBuffer, "RC_HB") == 0)
 	{
@@ -701,6 +1648,23 @@ static void HandleTextCommand(char *pBuffer)
 	{
 		SetManualMode();
 		USART3_printf("Manual mode\r\n");
+		commandAccepted = 1;
+	}
+	else if(strcmp((const char *)pBuffer, "RC_TEL0") == 0)
+	{
+		TelemetryEnabled = 0;
+		USART3_printf("Telemetry off\r\n");
+		commandAccepted = 1;
+	}
+	else if(strcmp((const char *)pBuffer, "RC_TEL1") == 0)
+	{
+		TelemetryEnabled = 1;
+		USART3_printf("Telemetry on\r\n");
+		commandAccepted = 1;
+	}
+	else if(strcmp((const char *)pBuffer, "RC_STAT") == 0)
+	{
+		PrintTelemetry();
 		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer, "RC_STR") == 0)
@@ -739,7 +1703,7 @@ static void HandleTextCommand(char *pBuffer)
 	{
 		if(ParseCommandValue(&pBuffer[6], &value, 0) && value >= 0.0f && value <= 6.0f)
 		{
-			if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW)
+			if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW || ControlMode == CTRL_ARC)
 			{
 				SetManualMode();
 			}
@@ -758,8 +1722,7 @@ static void HandleTextCommand(char *pBuffer)
 		if(ParseCommandValue(&pBuffer[6], &value, 0))
 		{
 			SetManualMode();
-			Angle = ClampFloat(value, 0.0f, 180.0f);
-			SetServoRotation(Angle);
+			SetSteeringAngle(value);
 			USART3_printf("Servo to %f deg!\r\n", Angle);
 			commandAccepted = 1;
 		}
@@ -822,7 +1785,7 @@ static void HandleTextCommand(char *pBuffer)
 	}
 	else if(strcmp((const char *)pBuffer,COMMANDS[0]) == 0)
 	{
-		if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW)
+		if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW || ControlMode == CTRL_ARC)
 		{
 			SetManualMode();
 		}
@@ -833,7 +1796,7 @@ static void HandleTextCommand(char *pBuffer)
 	}
 	else if(strcmp((const char *)pBuffer,COMMANDS[1]) == 0)
 	{
-		if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW)
+		if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW || ControlMode == CTRL_ARC)
 		{
 			SetManualMode();
 		}
@@ -890,7 +1853,7 @@ static void HandleTextCommand(char *pBuffer)
 		if(ParseCommandValue(&pBuffer[5], &rotateCmd, 0))
 		{
 			SetManualMode();
-			Angle = ClampFloat(180.0f - rotateCmd, 0.0f, 180.0f);
+			SetSteeringAngle(180.0f - rotateCmd);
 			commandAccepted = 1;
 		}
 		else
@@ -899,13 +1862,13 @@ static void HandleTextCommand(char *pBuffer)
 			return;
 		}
 		USART3_printf("Rotate to %f deg!\r\n",Angle);
-		SetServoRotation(Angle);
+		SetSteeringAngle(Angle);
 	}
 	else if(strncmp((const char *)pBuffer,COMMANDS[2],6) == 0)
 	{
 		if(pBuffer[6] >= '0' && pBuffer[6] <= '6')
 		{
-			if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW)
+			if(ControlMode == CTRL_AUTO_ROUTE || ControlMode == CTRL_DISTANCE || ControlMode == CTRL_TURN_YAW || ControlMode == CTRL_ARC)
 			{
 				SetManualMode();
 			}
@@ -994,7 +1957,7 @@ int main ()
 	//OLED_Init();
 	SysTick_Init();
 	ServoPWM_Init();
-	SetServoRotation(90.0);
+	SetSteeringAngle(90.0f);
 	
 	Motor_Init();
 	SetStandbyMode();
@@ -1023,11 +1986,9 @@ int main ()
 		//USART3_printf("%f,%f,%f,%f,%f,%f,%f\r\n",EA.MPU6050_Yaw,EA.MPU6050_Roll,EA.MPU6050_Pitch,MD.zAcc*G*16/(0X7FFF),atan2(MD.xAcc,MD.yAcc)/PI*180,atan2(MD.yAcc,MD.zAcc)/PI*180,atan2(MD.xAcc,MD.zAcc)/PI*180);
 		 //USART3_printf("%.3f,%.3f,%.3f\r\n", MM.roll, MM.pitch, MM.yaw);
 		 //USART3_printf("%f,%f,%f,%d,%f,%f\r\n",rSpeed.Speed,lSpeed.Speed,aveSpeed,SpeedRank,rSpeed_PID.Out,lSpeed_PID.Out);
-		 if(TakeTaskFlag(&TelemetryReady))
+		 if(TakeTaskFlag(&TelemetryReady) && TelemetryEnabled)
 		 {
-			 Odometry_t snapshot;
-			 Odometry_GetSnapshot(&snapshot);
-			 USART3_printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\r\n",MM.GyroX/16.4f, New_Yaw, Angle, aveSpeed, snapshot.x, snapshot.y, headingPID.Kp, headingPID.Ki, headingPID.Kd);
+			 PrintTelemetry();
 		 }
 	}
 }

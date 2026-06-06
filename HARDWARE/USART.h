@@ -53,4 +53,6 @@ uint8_t GetUSART3RXTState(void);
 
 uint8_t USART3_ReadText(char *buffer, uint16_t bufferSize);
 
+uint8_t USART3_GetDroppedTextCount(void);
+
 #endif

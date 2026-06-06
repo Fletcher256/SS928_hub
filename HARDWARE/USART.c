@@ -18,13 +18,17 @@ volatile uint16_t BufferCnt = 0;
 
 #define USART3_BUFFER_SIZE 128
 #define USART3_TX_BUFFER_SIZE 512
+#define USART3_RX_QUEUE_DEPTH 4
 
 int8_t DataBuffer[128];
 
 char TextBuffer[USART3_BUFFER_SIZE];
-static char ReadyTextBuffer[USART3_BUFFER_SIZE];
+static char ReadyTextQueue[USART3_RX_QUEUE_DEPTH][USART3_BUFFER_SIZE];
 static char LastTextBuffer[USART3_BUFFER_SIZE];
-static volatile uint8_t ReadyTextValid = 0;
+static volatile uint8_t ReadyTextHead = 0;
+static volatile uint8_t ReadyTextTail = 0;
+static volatile uint8_t ReadyTextCount = 0;
+static volatile uint8_t ReadyTextDropped = 0;
 
 static uint8_t TxBuffer[USART3_TX_BUFFER_SIZE];
 static volatile uint16_t TxHead = 0;
@@ -55,6 +59,46 @@ static void CopyText(char *dest, const char *src, uint16_t destSize)
 		i++;
 	}
 	dest[i] = '\0';
+}
+
+static void PushReadyText(const char *text)
+{
+	if(text[0] == '\0')
+	{
+		return;
+	}
+
+	if(ReadyTextCount >= USART3_RX_QUEUE_DEPTH)
+	{
+		ReadyTextDropped++;
+		return;
+	}
+
+	CopyText(ReadyTextQueue[ReadyTextHead], text, USART3_BUFFER_SIZE);
+	ReadyTextHead++;
+	if(ReadyTextHead >= USART3_RX_QUEUE_DEPTH)
+	{
+		ReadyTextHead = 0;
+	}
+	ReadyTextCount++;
+}
+
+static uint8_t PopReadyText(char *buffer, uint16_t bufferSize)
+{
+	if(ReadyTextCount == 0)
+	{
+		return 0;
+	}
+
+	CopyText(buffer, ReadyTextQueue[ReadyTextTail], bufferSize);
+	CopyText(LastTextBuffer, ReadyTextQueue[ReadyTextTail], USART3_BUFFER_SIZE);
+	ReadyTextTail++;
+	if(ReadyTextTail >= USART3_RX_QUEUE_DEPTH)
+	{
+		ReadyTextTail = 0;
+	}
+	ReadyTextCount--;
+	return 1;
 }
 
 //SET指令可以设置当前的SpeedRank。
@@ -116,7 +160,7 @@ void USART3_Init()
 	USART_InitTypeDef USART_InitStructure;
 	
 	//这个初始化函数会根据DIV与内部时钟频率自动换算对接硬件的波特率
-	USART_InitStructure.USART_BaudRate = 115200;
+	USART_InitStructure.USART_BaudRate = 9600;
 	
 	//硬件流控制要进中断,这里不用
 	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
@@ -244,13 +288,13 @@ int fputc(int ch, FILE * serial)
 //这个封装的方案不改printf底层但要开缓冲区
 void USART3_printf(const char * format,...)
 {
-	char str[100];
+	char str[192];
 	
 	va_list ap;
 	
 	va_start(ap, format);
 	
-	vsnprintf((char *)str,100,format,ap);
+	vsnprintf((char *)str,sizeof(str),format,ap);
 	
 	USART3_SendString(str);
 	
@@ -303,7 +347,6 @@ char * GetUSART3TextBuffer()
 
 uint8_t USART3_ReadText(char *buffer, uint16_t bufferSize)
 {
-	uint16_t i = 0;
 	uint8_t ready = 0;
 
 	if(buffer == NULL || bufferSize == 0)
@@ -312,21 +355,22 @@ uint8_t USART3_ReadText(char *buffer, uint16_t bufferSize)
 	}
 
 	__disable_irq();
-	if(ReadyTextValid)
-	{
-		while(i < (uint16_t)(bufferSize - 1) && ReadyTextBuffer[i] != '\0')
-		{
-			buffer[i] = ReadyTextBuffer[i];
-			i++;
-		}
-		buffer[i] = '\0';
-		CopyText(LastTextBuffer, buffer, USART3_BUFFER_SIZE);
-		ReadyTextValid = 0;
-		ready = 1;
-	}
+	ready = PopReadyText(buffer, bufferSize);
 	__enable_irq();
 
 	return ready;
+}
+
+uint8_t USART3_GetDroppedTextCount(void)
+{
+	uint8_t dropped;
+
+	__disable_irq();
+	dropped = ReadyTextDropped;
+	ReadyTextDropped = 0;
+	__enable_irq();
+
+	return dropped;
 }
 
 uint16_t GetUSART3BufferCnt()
@@ -381,12 +425,10 @@ uint8_t GetUSART3RXTState()
 	uint8_t ready = 0;
 
 	__disable_irq();
-	if(ReadyTextValid)
+	if(ReadyTextCount > 0)
 	{
 		//标志位清理防止后续反复进入读取状态
-		CopyText(LastTextBuffer, ReadyTextBuffer, USART3_BUFFER_SIZE);
-		ReadyTextValid = 0;
-		ready = 1;
+		ready = PopReadyText(LastTextBuffer, USART3_BUFFER_SIZE);
 	}
 	__enable_irq();
 
@@ -448,13 +490,12 @@ void USART3_IRQHandler()
 		else if(isUSART3_TState == 1)
 		{
 			//为尾部,终止读取。
-			if(U3Data == TPACKAGE_TAIL0)
+			if(U3Data == TPACKAGE_TAIL0 || U3Data == TPACKAGE_TAIL1)
 			{
 				TextBuffer[BufferCnt] = '\0';
-				if(!ReadyTextValid)
+				if(BufferCnt > 0)
 				{
-					CopyText(ReadyTextBuffer, TextBuffer, USART3_BUFFER_SIZE);
-					ReadyTextValid = 1;
+					PushReadyText(TextBuffer);
 				}
 				BufferCnt = 0;
 				isUSART3_TState = 0;

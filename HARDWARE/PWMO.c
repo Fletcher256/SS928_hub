@@ -6,6 +6,60 @@
 
 #define TIM2_SERVO_ARR 20000
 
+#define SERVO_MIN_PULSE_US 1000U
+#define SERVO_MAX_PULSE_US 2000U
+#define SERVO_UPDATE_DEADBAND_DEG 0.8f
+
+static uint16_t ServoLastPulseUs = 1500U;
+static float ServoLastAngle = 90.0f;
+static uint8_t ServoPWMInitialized = 0;
+
+static uint16_t ServoAngleToPulse(float Angle)
+{
+	if(Angle < 0.0f)
+	{
+		Angle = 0.0f;
+	}
+	else if(Angle > 180.0f)
+	{
+		Angle = 180.0f;
+	}
+	return (uint16_t)((Angle / 180.0f) * (float)(SERVO_MAX_PULSE_US - SERVO_MIN_PULSE_US) + (float)SERVO_MIN_PULSE_US);
+}
+
+uint8_t ServoPWM_IsHealthy(void)
+{
+	if(!ServoPWMInitialized)
+	{
+		return 0;
+	}
+	if(TIM2->PSC != (TIM2_SERVO_PSC - 1U))
+	{
+		return 0;
+	}
+	if(TIM2->ARR != (TIM2_SERVO_ARR - 1U))
+	{
+		return 0;
+	}
+	if((TIM2->CR1 & TIM_CR1_CEN) == 0U)
+	{
+		return 0;
+	}
+	if((TIM2->CCER & TIM_CCER_CC2E) == 0U)
+	{
+		return 0;
+	}
+	return 1;
+}
+
+static void ServoPWM_RecoverIfNeeded(void)
+{
+	if(!ServoPWM_IsHealthy())
+	{
+		ServoPWM_Init();
+	}
+}
+
 void ServoPWM_Init()
 {
 	//配置PWM外部GPIO口。
@@ -58,6 +112,7 @@ void ServoPWM_Init()
 	//因为时基初始化结束后需要再次强制更新事件来将重装载值更新(有PSCbuffer是这样的)。这会导致CPU直接进入中断。因此下面把那个标志位给0先不让那个内部if执行
 	//这样就不会每次初始化多执行一次中断了。
 	TIM_ClearITPendingBit(TIM2,TIM_IT_Update);
+	TIM_ITConfig(TIM2,TIM_IT_Update,DISABLE);
 	
 	//------------以下配置OC口的控制寄存器
 	
@@ -90,12 +145,17 @@ void ServoPWM_Init()
 	//用4个PWM口来控制舵机进行转向。
 	//TIM_OC1Init(TIM2,&TIM_OCInitStructure);
 	TIM_OC2Init(TIM2,&TIM_OCInitStructure);
+	TIM_OC2PreloadConfig(TIM2, TIM_OCPreload_Enable);
 	//TIM_OC3Init(TIM2,&TIM_OCInitStructure);
 	//TIM_OC4Init(TIM2,&TIM_OCInitStructure);
+	TIM_ARRPreloadConfig(TIM2, ENABLE);
 	
 	//定时器触发器使能
 	
 	TIM_Cmd(TIM2,ENABLE);
+	TIM_SetCompare2(TIM2, ServoLastPulseUs);
+	TIM_GenerateEvent(TIM2, TIM_EventSource_Update);
+	ServoPWMInitialized = 1;
 }
 
 //设置TIM2各路比较器的值
@@ -121,6 +181,8 @@ void SetTIM2CH4ARR(uint16_t t)
 
 void SetServoRotation(float Angle)
 {
+	uint8_t pwmHealthy;
+
 	if(Angle < 0.0f)
 	{
 		Angle = 0.0f;
@@ -130,6 +192,55 @@ void SetServoRotation(float Angle)
 		Angle = 180.0f;
 	}
 	//实际测试的时候我们可以发现,若以小车的中线为90度的话,偏移度在-60~+60度之间。
-	TIM_SetCompare2(TIM2,(Angle /180)*2000+500);
+	pwmHealthy = ServoPWM_IsHealthy();
+	if(pwmHealthy)
+	{
+		float diff = Angle - ServoLastAngle;
+		if(diff < 0.0f)
+		{
+			diff = -diff;
+		}
+		if(diff < SERVO_UPDATE_DEADBAND_DEG)
+		{
+			return;
+		}
+	}
+	ServoLastAngle = Angle;
+	ServoLastPulseUs = ServoAngleToPulse(Angle);
+	if(!pwmHealthy)
+	{
+		ServoPWM_RecoverIfNeeded();
+	}
+	TIM_SetCompare2(TIM2, ServoLastPulseUs);
+}
+
+float ServoPWM_GetLastAngle(void)
+{
+	return ServoLastAngle;
+}
+
+uint16_t ServoPWM_GetPulseUs(void)
+{
+	return ServoLastPulseUs;
+}
+
+uint16_t ServoPWM_GetPsc(void)
+{
+	return (uint16_t)TIM2->PSC;
+}
+
+uint16_t ServoPWM_GetArr(void)
+{
+	return (uint16_t)TIM2->ARR;
+}
+
+uint16_t ServoPWM_GetCcr2(void)
+{
+	return (uint16_t)TIM2->CCR2;
+}
+
+uint16_t ServoPWM_GetCcer(void)
+{
+	return (uint16_t)TIM2->CCER;
 }
 
