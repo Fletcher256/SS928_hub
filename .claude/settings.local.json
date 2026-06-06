@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import serial.tools.list_ports; ports = list\\(serial.tools.list_ports.comports\\(\\)\\); [print\\(f'{p.device} - {p.description}'\\) for p in ports]\")"
+    ]
+  }
+}
