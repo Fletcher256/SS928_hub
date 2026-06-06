@@ -6,21 +6,56 @@
 //0为空闲,1为读取中,2为读到尾部但数据还未取走
 
 //电脑端可以通过COM7传出控制口将蓝牙与电脑进行配对。
-uint8_t isUSART3_TState = 0;
+volatile uint8_t isUSART3_TState = 0;
 
-uint8_t isUSART3_DState = 0;
+volatile uint8_t isUSART3_DState = 0;
 
-uint8_t USART3Flag_RX = 0;
+volatile uint8_t USART3Flag_RX = 0;
 
-uint16_t U3Data = 0;
+volatile uint16_t U3Data = 0;
 
-uint16_t BufferCnt = 0;
+volatile uint16_t BufferCnt = 0;
 
 #define USART3_BUFFER_SIZE 128
+#define USART3_TX_BUFFER_SIZE 512
 
 int8_t DataBuffer[128];
 
 char TextBuffer[USART3_BUFFER_SIZE];
+static char ReadyTextBuffer[USART3_BUFFER_SIZE];
+static char LastTextBuffer[USART3_BUFFER_SIZE];
+static volatile uint8_t ReadyTextValid = 0;
+
+static uint8_t TxBuffer[USART3_TX_BUFFER_SIZE];
+static volatile uint16_t TxHead = 0;
+static volatile uint16_t TxTail = 0;
+
+static uint16_t USART3_NextTxIndex(uint16_t index)
+{
+	index++;
+	if(index >= USART3_TX_BUFFER_SIZE)
+	{
+		index = 0;
+	}
+	return index;
+}
+
+static void CopyText(char *dest, const char *src, uint16_t destSize)
+{
+	uint16_t i = 0;
+
+	if(destSize == 0)
+	{
+		return;
+	}
+
+	while(i < (uint16_t)(destSize - 1) && src[i] != '\0')
+	{
+		dest[i] = src[i];
+		i++;
+	}
+	dest[i] = '\0';
+}
 
 //SET指令可以设置当前的SpeedRank。
 //DT:方向;SR,目标速度等级,RT:角度.
@@ -81,7 +116,7 @@ void USART3_Init()
 	USART_InitTypeDef USART_InitStructure;
 	
 	//这个初始化函数会根据DIV与内部时钟频率自动换算对接硬件的波特率
-	USART_InitStructure.USART_BaudRate = 9600;
+	USART_InitStructure.USART_BaudRate = 115200;
 	
 	//硬件流控制要进中断,这里不用
 	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
@@ -126,6 +161,22 @@ void USART3_Init()
 
 void USART3_SendByte(uint8_t Byte)
 {
+	uint16_t nextHead;
+
+	while(1)
+	{
+		__disable_irq();
+		nextHead = USART3_NextTxIndex(TxHead);
+		if(nextHead != TxTail)
+		{
+			TxBuffer[TxHead] = Byte;
+			TxHead = nextHead;
+			USART_ITConfig(USART3, USART_IT_TXE, ENABLE);
+			__enable_irq();
+			return;
+		}
+		__enable_irq();
+	}
 	//检测输出缓冲寄存器中的值是否转移到了移位寄存器中,转移完成才可以认为其可进行下一次读取。
 	
 	//TXE意思是可以TDR空了直接可以再传动东西进去,但TC是发送完了再传值,没这个快(TC要等一个字节发送周期结束才可以继续发送,属于把缓冲区当摆设)
@@ -133,9 +184,7 @@ void USART3_SendByte(uint8_t Byte)
 //	{
 //		USART_SendData(USART3,Byte);
 //	}
-	USART_SendData(USART3,Byte);
 		//必须阻塞式检测吗。。虽然一般不会卡主进程就是但要是中断进的频繁。。
-	while(USART_GetFlagStatus(USART3,USART_FLAG_TXE) ==RESET);
 	
 }
 
@@ -249,13 +298,46 @@ int8_t * GetUSART3DataBuffer()
 
 char * GetUSART3TextBuffer()
 {
-	return TextBuffer;
+	return LastTextBuffer;
+}
+
+uint8_t USART3_ReadText(char *buffer, uint16_t bufferSize)
+{
+	uint16_t i = 0;
+	uint8_t ready = 0;
+
+	if(buffer == NULL || bufferSize == 0)
+	{
+		return 0;
+	}
+
+	__disable_irq();
+	if(ReadyTextValid)
+	{
+		while(i < (uint16_t)(bufferSize - 1) && ReadyTextBuffer[i] != '\0')
+		{
+			buffer[i] = ReadyTextBuffer[i];
+			i++;
+		}
+		buffer[i] = '\0';
+		CopyText(LastTextBuffer, buffer, USART3_BUFFER_SIZE);
+		ReadyTextValid = 0;
+		ready = 1;
+	}
+	__enable_irq();
+
+	return ready;
 }
 
 uint16_t GetUSART3BufferCnt()
 {
-	uint16_t t = BufferCnt;
+	uint16_t t;
+
+	__disable_irq();
+	t = BufferCnt;
 	BufferCnt = 0;
+	__enable_irq();
+
 	return t;
 }
 
@@ -280,29 +362,53 @@ uint16_t GetUSART3Data()
 //若数据已经读取完毕,那么这里会获得有效标识,主循环里可以开始读取。
 uint8_t GetUSART3RXDState()
 {
+	uint8_t ready = 0;
+
+	__disable_irq();
 	if(isUSART3_DState == 2)
 	{
 		//标志位清理防止后续反复进入读取状态
 		isUSART3_DState = 0;
-		return 1;
+		ready = 1;
 	}
-	return 0;
+	__enable_irq();
+
+	return ready;
 }
 
 uint8_t GetUSART3RXTState()
 {
-	if(isUSART3_TState == 2)
+	uint8_t ready = 0;
+
+	__disable_irq();
+	if(ReadyTextValid)
 	{
 		//标志位清理防止后续反复进入读取状态
-		isUSART3_TState = 0;
-		return 1;
+		CopyText(LastTextBuffer, ReadyTextBuffer, USART3_BUFFER_SIZE);
+		ReadyTextValid = 0;
+		ready = 1;
 	}
-	return 0;
+	__enable_irq();
+
+	return ready;
 }
 
 //还有一种Read方法用的是中断触发。
 void USART3_IRQHandler()
 {
+	if (USART_GetITStatus(USART3, USART_IT_TXE) == SET)
+	{
+		if(TxTail != TxHead)
+		{
+			USART_SendData(USART3, TxBuffer[TxTail]);
+			TxTail = USART3_NextTxIndex(TxTail);
+		}
+		else
+		{
+			USART_ITConfig(USART3, USART_IT_TXE, DISABLE);
+		}
+	}
+
 		//检查中断标志位是否为SET,即缓冲区接收完毕
 	if (USART_GetITStatus(USART3, USART_IT_RXNE) == SET)
 	{		
@@ -336,6 +442,7 @@ void USART3_IRQHandler()
 		{
 			isUSART3_TState = 1;
 			BufferCnt = 0;
+			TextBuffer[0] = '\0';
 		}			
 		//中途,正常读取数据
 		else if(isUSART3_TState == 1)
@@ -343,9 +450,15 @@ void USART3_IRQHandler()
 			//为尾部,终止读取。
 			if(U3Data == TPACKAGE_TAIL0)
 			{
-				isUSART3_TState = 2;
 				TextBuffer[BufferCnt] = '\0';
+				if(!ReadyTextValid)
+				{
+					CopyText(ReadyTextBuffer, TextBuffer, USART3_BUFFER_SIZE);
+					ReadyTextValid = 1;
+				}
 				BufferCnt = 0;
+				isUSART3_TState = 0;
+				TextBuffer[0] = '\0';
 			}
 			//否则读取数据(及时是和头部一样的数据也没关系。)
 			else if(U3Data != TPACKAGE_TAIL1)

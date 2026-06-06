@@ -358,19 +358,22 @@ float MPU6050_GetTemp(MPU6050 *this)
 }
 
 float ACC_abs = 0;
-void MPU6050_Get_Angle(MPU6050 *this)
+void MPU6050_Get_AngleDt(MPU6050 *this, float dt)
 {
     float Ax, Ay, Az;
     float Gx, Gy, Gz;
+    if (dt <= 0.0f) {
+        dt = mpu6050_dt;
+    }
     MPU6050_Get_Raw(this);
     // 读取加速度计数据
     Ax = this->AccX * accelScale; // 假设加速度计量程为±2g
     Ay = this->AccY * accelScale;
     Az = this->AccZ * accelScale;
     // 读取陀螺仪数据
-    Gx = this->GyroX * gyroScale * mpu6050_dt;
-    Gy = this->GyroY * gyroScale * mpu6050_dt;
-    Gz = this->GyroZ * gyroScale * mpu6050_dt;
+    Gx = this->GyroX * gyroScale * dt;
+    Gy = this->GyroY * gyroScale * dt;
+    Gz = this->GyroZ * gyroScale * dt;
 
     // 计算加速度的绝对值
     float absAcc = sqrt(Ax * Ax + Ay * Ay + Az * Az);
@@ -396,6 +399,11 @@ void MPU6050_Get_Angle(MPU6050 *this)
 }
 
 // 四元素法+动态互补滤波
+void MPU6050_Get_Angle(MPU6050 *this)
+{
+    MPU6050_Get_AngleDt(this, mpu6050_dt);
+}
+
 void MPU6050_Get_Angle_Plus(MPU6050 *this)
 {
     static uint16_t times = 0;

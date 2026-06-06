@@ -1,6 +1,3 @@
-#ifdef SS928_HOST_SIM
-#include "sim/firmware_host/host_stubs.h"
-#else
 #include "stm32f10x.h"
 #include "Timers.h"
 #include "Motors.h"
@@ -10,7 +7,6 @@
 #include "MPU6050.h"
 #include "filter.h"
 #include "LED.h"
-#endif
 
 #include "string.h"
 #include <math.h>
@@ -66,6 +62,8 @@ KalmanFilter Kal_Pitch;
 
 volatile uint8_t TelemetryReady = 0;
 volatile uint32_t ControlTicks = 0;
+static volatile uint16_t MpuTaskElapsedMs = 0;
+static volatile uint8_t StraightTaskReady = 0;
 
 #define REMOTE_TIMEOUT_MS       2000U
 #define DISTANCE_TIMEOUT_MS     30000U
@@ -299,17 +297,19 @@ static uint8_t PrepareDistanceDrive(float distanceCm)
 	return 1;
 }
 
-static void StartDistanceDrive(float distanceCm)
+static uint8_t StartDistanceDrive(float distanceCm)
 {
 	if(PrepareDistanceDrive(distanceCm))
 	{
 		ControlMode = CTRL_DISTANCE;
 		AutoStep = AUTO_IDLE;
 		USART3_printf("Distance drive %.1f cm\r\n", TargetDistanceCm);
+		return 1;
 	}
 	else
 	{
 		USART3_printf("Invalid distance target!\r\n");
+		return 0;
 	}
 }
 
@@ -329,21 +329,23 @@ static uint8_t PrepareYawTurn(float relativeYawDeg)
 	return 1;
 }
 
-static void StartYawTurn(float relativeYawDeg)
+static uint8_t StartYawTurn(float relativeYawDeg)
 {
 	if(PrepareYawTurn(relativeYawDeg))
 	{
 		ControlMode = CTRL_TURN_YAW;
 		AutoStep = AUTO_IDLE;
 		USART3_printf("Yaw turn %.1f deg\r\n", relativeYawDeg);
+		return 1;
 	}
 	else
 	{
 		USART3_printf("Invalid yaw target!\r\n");
+		return 0;
 	}
 }
 
-static void StartAutoRoute(void)
+static uint8_t StartAutoRoute(void)
 {
 	rS = PARKING;
 	SetLEDs(GPIO_Pin_12);
@@ -353,21 +355,26 @@ static void StartAutoRoute(void)
 	if(PrepareDistanceDrive(AUTO_FORWARD1_CM))
 	{
 		USART3_printf("Auto route start\r\n");
+		return 1;
 	}
 	else
 	{
 		SetStandbyMode();
 		USART3_printf("Auto route failed\r\n");
+		return 0;
 	}
 }
 
 static uint8_t UpdateDistanceDrive(void)
 {
+	Odometry_t snapshot;
+
 	if(TargetDistanceCm <= 0.0f)
 	{
 		return 1;
 	}
-	if((TargetDistanceCm - odom.distance) <= DISTANCE_DONE_CM)
+	Odometry_GetSnapshot(&snapshot);
+	if((TargetDistanceCm - snapshot.distance) <= DISTANCE_DONE_CM)
 	{
 		return 1;
 	}
@@ -637,7 +644,9 @@ void keep_straight()
 	// 里程计直接测量横向位移,补偿航向控制的盲区
 	// odom.x>0=车偏右 → cross_correction>0 → servo>90 → 左转修正
 	if(headingPID.CrossTrackEnable) {
-		float cross_correction = headingPID.CrossTrackKp * odom.x;
+		Odometry_t snapshot;
+		Odometry_GetSnapshot(&snapshot);
+		float cross_correction = headingPID.CrossTrackKp * snapshot.x;
 		// 后退时横向修正方向也需翻转
 		if(is_up == -1) {
 			cross_correction = -cross_correction;
@@ -675,37 +684,40 @@ void keep_straight()
 static void HandleTextCommand(char *pBuffer)
 {
 	float value = 0.0f;
-
-	RefreshCommandWatchdog();
+	uint8_t commandAccepted = 0;
 
 	if(strcmp((const char *)pBuffer, "RC_HB") == 0)
 	{
 		USART3_printf("OK\r\n");
+		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer, "RC_STOP") == 0 || strcmp((const char *)pBuffer, "AU_STOP") == 0)
 	{
 		USART3_printf("Stop!\r\n");
 		SetStandbyMode();
+		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer, "RC_MAN") == 0)
 	{
 		SetManualMode();
 		USART3_printf("Manual mode\r\n");
+		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer, "RC_STR") == 0)
 	{
 		PrepareStraightHold();
 		USART3_printf("Straight hold mode\r\n");
+		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer, "RC_AUTO") == 0 || strcmp((const char *)pBuffer, "AU_RUN") == 0)
 	{
-		StartAutoRoute();
+		commandAccepted = StartAutoRoute();
 	}
 	else if(strncmp((const char *)pBuffer, "RC_DST", 6) == 0)
 	{
 		if(ParseCommandValue(&pBuffer[6], &value, 0))
 		{
-			StartDistanceDrive(value);
+			commandAccepted = StartDistanceDrive(value);
 		}
 		else
 		{
@@ -716,7 +728,7 @@ static void HandleTextCommand(char *pBuffer)
 	{
 		if(ParseCommandValue(&pBuffer[6], &value, 0))
 		{
-			StartYawTurn(value);
+			commandAccepted = StartYawTurn(value);
 		}
 		else
 		{
@@ -734,6 +746,7 @@ static void HandleTextCommand(char *pBuffer)
 			SetManualModeIfIdle();
 			SetSpeedRank((int8_t)value);
 			USART3_printf("SET %d Rank!\r\n", SpeedRank);
+			commandAccepted = 1;
 		}
 		else
 		{
@@ -748,6 +761,7 @@ static void HandleTextCommand(char *pBuffer)
 			Angle = ClampFloat(value, 0.0f, 180.0f);
 			SetServoRotation(Angle);
 			USART3_printf("Servo to %f deg!\r\n", Angle);
+			commandAccepted = 1;
 		}
 		else
 		{
@@ -757,6 +771,7 @@ static void HandleTextCommand(char *pBuffer)
 	else if(strcmp((const char *)pBuffer,COMMANDS[7]) == 0)
 	{
 		USART3_printf("Reset!\r\n");
+		commandAccepted = 1;
 		SoftReset();
 	}
 	else if(strcmp((const char *)pBuffer,COMMANDS[6]) == 0)
@@ -764,22 +779,25 @@ static void HandleTextCommand(char *pBuffer)
 		SetManualMode();
 		USART3_printf("Down!\r\n");
 		if(is_up == 1)ExDirect(0);
+		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer,COMMANDS[5]) == 0)
 	{
 		SetManualMode();
 		USART3_printf("Up!\r\n");
 		if(is_up == -1)ExDirect(1);
+		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer,COMMANDS[12]) == 0)
 	{
 		USART3_printf("Stand by!\r\n");
 		SetStandbyMode();
+		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer,COMMANDS[10]) == 0)
 	{
 		USART3_printf("Parking auto!\r\n");
-		StartAutoRoute();
+		commandAccepted = StartAutoRoute();
 	}
 	else if(strcmp((const char *)pBuffer,COMMANDS[11]) == 0)
 	{
@@ -787,17 +805,20 @@ static void HandleTextCommand(char *pBuffer)
 		SetStandbyMode();
 		rS = HITTED;
 		SetLEDs(GPIO_Pin_13);
+		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer,COMMANDS[8]) == 0)
 	{
 		USART3_printf("Straight!\r\n");
 		PrepareStraightHold();
+		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer,COMMANDS[9]) == 0)
 	{
 		SetManualMode();
 		is_turn = 1;
 		USART3_printf("Turn manual mode!\r\n");
+		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer,COMMANDS[0]) == 0)
 	{
@@ -808,6 +829,7 @@ static void HandleTextCommand(char *pBuffer)
 		SetManualModeIfIdle();
 		USART3_printf("SpeedRank add!\r\n");
 		SpeedAcc();
+		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer,COMMANDS[1]) == 0)
 	{
@@ -818,6 +840,7 @@ static void HandleTextCommand(char *pBuffer)
 		SetManualModeIfIdle();
 		USART3_printf("SpeedRank decline!\r\n");
 		SpeedSlowDown();
+		commandAccepted = 1;
 	}
 	else if(strcmp((const char *)pBuffer,COMMANDS[3]) == 0)
 	{
@@ -826,6 +849,7 @@ static void HandleTextCommand(char *pBuffer)
 		SpeedRank = 0;
 		rSetSpeed(0);
 		lSetSpeed(0);
+		commandAccepted = 1;
 	}
 	else if(strncmp((const char *)pBuffer,COMMANDS[13],4) == 0)
 	{
@@ -838,14 +862,17 @@ static void HandleTextCommand(char *pBuffer)
 			case 'P':
 				headingPID.Kp = t;
 				USART3_printf("Set heading Kp to %f!\r\n",headingPID.Kp);
+				commandAccepted = 1;
 				break;
 			case 'I':
 				headingPID.Ki = t;
 				USART3_printf("Set heading Ki to %f!\r\n",headingPID.Ki);
+				commandAccepted = 1;
 				break;
 			case 'D':
 				headingPID.Kd = t;
 				USART3_printf("Set heading Kd to %f!\r\n",headingPID.Kd);
+				commandAccepted = 1;
 				break;
 			default:
 				USART3_printf("Unknown heading PID command!\r\n");
@@ -864,6 +891,7 @@ static void HandleTextCommand(char *pBuffer)
 		{
 			SetManualMode();
 			Angle = ClampFloat(180.0f - rotateCmd, 0.0f, 180.0f);
+			commandAccepted = 1;
 		}
 		else
 		{
@@ -884,6 +912,7 @@ static void HandleTextCommand(char *pBuffer)
 			SetManualModeIfIdle();
 			SetSpeedRank(pBuffer[6]-'0');
 			USART3_printf("SET %d Rank!\r\n",SpeedRank);
+			commandAccepted = 1;
 		}
 		else
 		{
@@ -894,9 +923,58 @@ static void HandleTextCommand(char *pBuffer)
 	{
 		USART3_printf("Unknown command!\r\n");
 	}
+
+	if(commandAccepted)
+	{
+		RefreshCommandWatchdog();
+	}
 }
 
-#ifndef SS928_HOST_SIM
+static uint8_t TakeTaskFlag(volatile uint8_t *flag)
+{
+	uint8_t ready;
+
+	__disable_irq();
+	ready = *flag;
+	*flag = 0;
+	__enable_irq();
+
+	return ready;
+}
+
+static uint16_t TakeElapsedMs(volatile uint16_t *elapsedMs)
+{
+	uint16_t elapsed;
+
+	__disable_irq();
+	elapsed = *elapsedMs;
+	*elapsedMs = 0;
+	__enable_irq();
+
+	return elapsed;
+}
+
+static void ServiceMpuTask(void)
+{
+	uint16_t elapsedMs = TakeElapsedMs(&MpuTaskElapsedMs);
+
+	if(elapsedMs > 0)
+	{
+		MPU6050_Get_AngleDt(&MM, (float)elapsedMs * 0.001f);
+		New_Pitch = KalmanFilter_Update(&Kal_Pitch,MM.pitch);
+		New_Roll = KalmanFilter_Update(&Kal_Roll,MM.roll);
+		New_Yaw = KalmanFilter_Update(&Kal_Yaw,MM.yaw);
+	}
+}
+
+static void ServiceStraightTask(void)
+{
+	if(TakeTaskFlag(&StraightTaskReady) && is_straight)
+	{
+		keep_straight();
+	}
+}
+
 int main ()
 {
 	KalmanFilter_Init(&Kal_Yaw,0.5,0.1,1,100);   // q=0.5: 稳态增益~83%,快速跟踪yaw变化(原0.01太慢仅吸收9%)
@@ -921,7 +999,7 @@ int main ()
 	Motor_Init();
 	SetStandbyMode();
 	RefreshCommandWatchdog();
-	char * pBuffer = NULL;	
+	char commandBuffer[128];
 	
 	//校验MPU6050是否成功读到数据。
 	USART3_printf("Everything is ready!\r\n");
@@ -929,12 +1007,13 @@ int main ()
 	{
 		//mpu_dmp_get_data(&MM.pitch,&MM.roll,&MM.yaw);
 		//读取标志位就绪。
-		if( GetUSART3RXTState() == 1)
+		if(USART3_ReadText(commandBuffer, sizeof(commandBuffer)) == 1)
 		{
-			pBuffer = GetUSART3TextBuffer();
-			HandleTextCommand(pBuffer);
+			HandleTextCommand(commandBuffer);
 		}
 
+		ServiceMpuTask();
+		ServiceStraightTask();
 		UpdateControlTask();
 
 		
@@ -944,10 +1023,11 @@ int main ()
 		//USART3_printf("%f,%f,%f,%f,%f,%f,%f\r\n",EA.MPU6050_Yaw,EA.MPU6050_Roll,EA.MPU6050_Pitch,MD.zAcc*G*16/(0X7FFF),atan2(MD.xAcc,MD.yAcc)/PI*180,atan2(MD.yAcc,MD.zAcc)/PI*180,atan2(MD.xAcc,MD.zAcc)/PI*180);
 		 //USART3_printf("%.3f,%.3f,%.3f\r\n", MM.roll, MM.pitch, MM.yaw);
 		 //USART3_printf("%f,%f,%f,%d,%f,%f\r\n",rSpeed.Speed,lSpeed.Speed,aveSpeed,SpeedRank,rSpeed_PID.Out,lSpeed_PID.Out);
-		 if(TelemetryReady)
+		 if(TakeTaskFlag(&TelemetryReady))
 		 {
-			 TelemetryReady = 0;
-			 USART3_printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\r\n",MM.GyroX/16.4f, New_Yaw, Angle, aveSpeed, odom.x, odom.y, headingPID.Kp, headingPID.Ki, headingPID.Kd);
+			 Odometry_t snapshot;
+			 Odometry_GetSnapshot(&snapshot);
+			 USART3_printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\r\n",MM.GyroX/16.4f, New_Yaw, Angle, aveSpeed, snapshot.x, snapshot.y, headingPID.Kp, headingPID.Ki, headingPID.Kd);
 		 }
 	}
 }
@@ -966,15 +1046,13 @@ void SysTick_Handler(void)
 
 	if(EXCOUNT(MPU6050Cnt,5) == 1)
 	{
-		MPU6050_Get_Angle(&MM);
+		if(MpuTaskElapsedMs <= 995U)
+		{
+			MpuTaskElapsedMs += 5U;
+		}
 		
 		//这里做一个读取丢包检测。如果一个数据超过8次没有任何变化那么认为MPU6050丢包,直接重新读取。
 		
-		New_Pitch = KalmanFilter_Update(&Kal_Pitch,MM.pitch);
-		
-		New_Roll = KalmanFilter_Update(&Kal_Roll,MM.roll);
-		
-		New_Yaw = KalmanFilter_Update(&Kal_Yaw,MM.yaw);
 	}
 	if(is_Switch)
 	{
@@ -996,7 +1074,7 @@ void SysTick_Handler(void)
 		//这个会导致正常调电机没法正常转向,调舵机的时候注意先把它关掉啊。。。
 		if(is_straight && (EXCOUNT(StraightCnt,20) == 1))
 		{
-			keep_straight() ;
+			StraightTaskReady = 1;
 		}
 
 		aveSpeed = (rSpeed.Speed + lSpeed.Speed)*0.5f;
@@ -1007,117 +1085,3 @@ void SysTick_Handler(void)
 		TelemetryReady = 1;
 	}
 }
-#endif
-
-#ifdef SS928_HOST_SIM
-typedef struct SS928HostSnapshot
-{
-	uint32_t tick_ms;
-	int16_t speed_rank;
-	float servo_angle;
-	float yaw_deg;
-	float target_yaw_deg;
-	float target_distance_cm;
-	float odom_x_cm;
-	float odom_y_cm;
-	float odom_distance_cm;
-	uint8_t run_state;
-	uint8_t control_mode;
-	uint8_t auto_step;
-	int8_t direction;
-	int8_t straight_enabled;
-	int8_t turn_enabled;
-} SS928HostSnapshot_t;
-
-void SS928_HostFirmwareInit(void)
-{
-	is_up = 1;
-	is_Pause = 1;
-	is_turn = 0;
-	is_straight = 0;
-	rS = STANDBY;
-	Angle = 90.0f;
-	New_Yaw = 0.0f;
-	New_Roll = 0.0f;
-	New_Pitch = 0.0f;
-	Org_Yaw = 0.0f;
-	TelemetryReady = 0;
-	ControlTicks = 0;
-	ControlMode = CTRL_IDLE;
-	AutoStep = AUTO_IDLE;
-	LastCommandTick = 0;
-	ActionStartTick = 0;
-	TargetDistanceCm = 0.0f;
-	TargetYaw = 0.0f;
-	AutoSpeedLevel = AUTO_DEFAULT_SPEED;
-	HeadingPID_Init(&headingPID);
-	Odometry_Reset();
-	InitAll();
-	SS928_HostClearLog();
-	SetServoRotation(Angle);
-	SetStandbyMode();
-	RefreshCommandWatchdog();
-}
-
-void SS928_HostFirmwareCommand(const char *command)
-{
-	char buffer[128];
-	size_t len = strlen(command);
-	if(len >= sizeof(buffer))
-	{
-		len = sizeof(buffer) - 1;
-	}
-	memcpy(buffer, command, len);
-	buffer[len] = '\0';
-	if(buffer[0] == '@')
-	{
-		HandleTextCommand(&buffer[1]);
-	}
-	else
-	{
-		HandleTextCommand(buffer);
-	}
-}
-
-void SS928_HostFirmwareInject(float yaw_deg, float odom_x_cm, float odom_y_cm, float odom_distance_cm)
-{
-	New_Yaw = NormalizeYaw(yaw_deg);
-	odom.x = odom_x_cm;
-	odom.y = odom_y_cm;
-	odom.distance = odom_distance_cm;
-}
-
-void SS928_HostFirmwareTick(uint32_t ms)
-{
-	uint32_t i;
-	static uint16_t straight_cnt = 0;
-	for(i = 0; i < ms; ++i)
-	{
-		ControlTicks++;
-		if(is_straight && EXCOUNT(straight_cnt, 20) == 1)
-		{
-			keep_straight();
-		}
-		UpdateControlTask();
-	}
-}
-
-void SS928_HostFirmwareSnapshot(SS928HostSnapshot_t *snapshot)
-{
-	snapshot->tick_ms = ControlTicks;
-	snapshot->speed_rank = SpeedRank;
-	snapshot->servo_angle = Angle;
-	snapshot->yaw_deg = New_Yaw;
-	snapshot->target_yaw_deg = TargetYaw;
-	snapshot->target_distance_cm = TargetDistanceCm;
-	snapshot->odom_x_cm = odom.x;
-	snapshot->odom_y_cm = odom.y;
-	snapshot->odom_distance_cm = odom.distance;
-	snapshot->run_state = (uint8_t)rS;
-	snapshot->control_mode = (uint8_t)ControlMode;
-	snapshot->auto_step = (uint8_t)AutoStep;
-	snapshot->direction = is_up;
-	snapshot->straight_enabled = is_straight;
-	snapshot->turn_enabled = is_turn;
-}
-#endif

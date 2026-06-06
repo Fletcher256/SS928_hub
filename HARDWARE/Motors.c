@@ -159,6 +159,18 @@ void Odometry_Reset(void)
  * right_speed_cms: 右轮速度(cm/s), 正值=前进
  * 基于两后轮差分推算航向变化和位移,不受IMU漂移影响
  */
+void Odometry_GetSnapshot(Odometry_t *snapshot)
+{
+	if(snapshot == 0)
+	{
+		return;
+	}
+
+	__disable_irq();
+	*snapshot = odom;
+	__enable_irq();
+}
+
 void Odometry_Update(float left_speed_cms, float right_speed_cms)
 {
 	float dl = left_speed_cms * 0.02f;   // 20ms内左轮行驶距离(cm)

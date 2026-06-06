@@ -20,30 +20,6 @@ Build outputs are written to:
 - `build/gcc/SS928_hub.hex`
 - `build/gcc/SS928_hub.bin`
 
-## PC Simulation
-
-Same-source C firmware behavior can be tested without connecting the car:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File sim\firmware_host\run.ps1
-```
-
-This builds `main.c` in host simulation mode and runs command/state-machine scenarios against the same C parser and control logic used by the STM32 firmware. See `sim/firmware_host/README.md`.
-
-The older Python simulator is still available for quick experimentation:
-
-```powershell
-py sim\sim_car.py
-```
-
-A browser animation is available at `sim/visualizer.html`.
-
-The simulator accepts the same text commands as USART3 and can inject virtual yaw/odometry values. See `sim/README.md` for scenario syntax and limitations.
-
-## Webots Simulation
-
-A Webots R2025a desktop simulation is available at `webots/worlds/ss928_car.wbt`. It reuses the Python control simulator and adds a 3D car scene, keyboard controls, labels, and a path trail. See `webots/README.md`.
-
 ## Serial Command Framing
 
 Text commands are sent through USART3 as:
