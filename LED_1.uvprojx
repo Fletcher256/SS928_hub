@@ -658,7 +658,7 @@
             <File>
               <FileName>main.c</FileName>
               <FileType>1</FileType>
-              <FilePath>.\main.c</FilePath>
+              <FilePath>.\USER\main.c</FilePath>
             </File>
             <File>
               <FileName>stm32f10x_conf.h</FileName>
@@ -726,6 +726,16 @@
               <FilePath>.\HARDWARE\Motors.h</FilePath>
             </File>
             <File>
+              <FileName>FSM.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\HARDWARE\FSM.c</FilePath>
+            </File>
+            <File>
+              <FileName>FSM.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\HARDWARE\FSM.h</FilePath>
+            </File>
+            <File>
               <FileName>MPU6050.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\HARDWARE\MPU6050.c</FilePath>
@@ -754,6 +764,16 @@
               <FileName>LED.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\HARDWARE\LED.h</FilePath>
+            </File>
+            <File>
+              <FileName>Steering.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\HARDWARE\Steering.c</FilePath>
+            </File>
+            <File>
+              <FileName>Steering.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\HARDWARE\Steering.h</FilePath>
             </File>
           </Files>
         </Group>

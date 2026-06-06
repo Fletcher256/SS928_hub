@@ -43,7 +43,18 @@ const char * COMMANDS[] = {
 			"ST_KD",
 			"MT_KP",	// [16]
 			"MT_KI",	// [17]
-			"MT_KD"
+			"MT_KD",	// [18]
+			"RC_HB",	// [19] 心跳
+			"RC_STOP",	// [20] 紧急停止
+			"AU_STOP",	// [21] 自动停止
+			"RC_MAN",	// [22] 手动模式
+			"RC_STR",	// [23] 直行保持
+			"RC_AUTO",	// [24] 自动路线
+			"AU_RUN",	// [25] 自动运行
+			"RC_DST",	// [26] 定距行驶
+			"RC_YAW",	// [27] 定角转弯
+			"RC_SPD",	// [28] 设定速度
+			"RC_STE"	// [29] 设定舵机
 };
 
 void USART3_Init()

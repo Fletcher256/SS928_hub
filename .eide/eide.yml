@@ -64,6 +64,8 @@ virtualFolder:
     - path: Core/Timers.c
     - path: HARDWARE/LED.c
     - path: HARDWARE/LED.h
+    - path: HARDWARE/FSM.c
+    - path: HARDWARE/FSM.h
     - path: HARDWARE/Steering.c
     - path: HARDWARE/Steering.h
   folders:
@@ -78,8 +80,6 @@ virtualFolder:
         - path: USER/stm32f10x_it.c
         - path: USER/stm32f10x_it.h
         - path: START/startup_stm32f10x_md.s
-        - path: USER/FSM.c
-        - path: USER/FSM.h
         - path: USER/main.c
       folders: []
 dependenceList: []
