@@ -1,24 +1,19 @@
+#ifdef SS928_HOST_SIM
+#include "sim/firmware_host/host_stubs.h"
+#else
 #include "stm32f10x.h"
+#include "Timers.h"
+#include "Motors.h"
+#include "PWMO.h"
+//#include "OLED.h"
+#include "USART.h"
+#include "MPU6050.h"
+#include "filter.h"
+#include "LED.h"
+#endif
 
 #include "string.h"
-
-#include "Timers.h"
-
-#include "Motors.h"
-
-#include "PWMO.h"
-
-//#include "OLED.h"
-
-#include "USART.h"
-
-#include "MPU6050.h"
-
 #include <math.h>
-
-#include "filter.h"
-
-#include "LED.h"
 
 // ========== 航向PID控制器 ==========
 // 坐标约定: 舵机>90°=左转, <90°=右转; MPU6050 yaw: 左转为正,右转为负
@@ -901,6 +896,7 @@ static void HandleTextCommand(char *pBuffer)
 	}
 }
 
+#ifndef SS928_HOST_SIM
 int main ()
 {
 	KalmanFilter_Init(&Kal_Yaw,0.5,0.1,1,100);   // q=0.5: 稳态增益~83%,快速跟踪yaw变化(原0.01太慢仅吸收9%)
@@ -1011,3 +1007,117 @@ void SysTick_Handler(void)
 		TelemetryReady = 1;
 	}
 }
+#endif
+
+#ifdef SS928_HOST_SIM
+typedef struct SS928HostSnapshot
+{
+	uint32_t tick_ms;
+	int16_t speed_rank;
+	float servo_angle;
+	float yaw_deg;
+	float target_yaw_deg;
+	float target_distance_cm;
+	float odom_x_cm;
+	float odom_y_cm;
+	float odom_distance_cm;
+	uint8_t run_state;
+	uint8_t control_mode;
+	uint8_t auto_step;
+	int8_t direction;
+	int8_t straight_enabled;
+	int8_t turn_enabled;
+} SS928HostSnapshot_t;
+
+void SS928_HostFirmwareInit(void)
+{
+	is_up = 1;
+	is_Pause = 1;
+	is_turn = 0;
+	is_straight = 0;
+	rS = STANDBY;
+	Angle = 90.0f;
+	New_Yaw = 0.0f;
+	New_Roll = 0.0f;
+	New_Pitch = 0.0f;
+	Org_Yaw = 0.0f;
+	TelemetryReady = 0;
+	ControlTicks = 0;
+	ControlMode = CTRL_IDLE;
+	AutoStep = AUTO_IDLE;
+	LastCommandTick = 0;
+	ActionStartTick = 0;
+	TargetDistanceCm = 0.0f;
+	TargetYaw = 0.0f;
+	AutoSpeedLevel = AUTO_DEFAULT_SPEED;
+	HeadingPID_Init(&headingPID);
+	Odometry_Reset();
+	InitAll();
+	SS928_HostClearLog();
+	SetServoRotation(Angle);
+	SetStandbyMode();
+	RefreshCommandWatchdog();
+}
+
+void SS928_HostFirmwareCommand(const char *command)
+{
+	char buffer[128];
+	size_t len = strlen(command);
+	if(len >= sizeof(buffer))
+	{
+		len = sizeof(buffer) - 1;
+	}
+	memcpy(buffer, command, len);
+	buffer[len] = '\0';
+	if(buffer[0] == '@')
+	{
+		HandleTextCommand(&buffer[1]);
+	}
+	else
+	{
+		HandleTextCommand(buffer);
+	}
+}
+
+void SS928_HostFirmwareInject(float yaw_deg, float odom_x_cm, float odom_y_cm, float odom_distance_cm)
+{
+	New_Yaw = NormalizeYaw(yaw_deg);
+	odom.x = odom_x_cm;
+	odom.y = odom_y_cm;
+	odom.distance = odom_distance_cm;
+}
+
+void SS928_HostFirmwareTick(uint32_t ms)
+{
+	uint32_t i;
+	static uint16_t straight_cnt = 0;
+	for(i = 0; i < ms; ++i)
+	{
+		ControlTicks++;
+		if(is_straight && EXCOUNT(straight_cnt, 20) == 1)
+		{
+			keep_straight();
+		}
+		UpdateControlTask();
+	}
+}
+
+void SS928_HostFirmwareSnapshot(SS928HostSnapshot_t *snapshot)
+{
+	snapshot->tick_ms = ControlTicks;
+	snapshot->speed_rank = SpeedRank;
+	snapshot->servo_angle = Angle;
+	snapshot->yaw_deg = New_Yaw;
+	snapshot->target_yaw_deg = TargetYaw;
+	snapshot->target_distance_cm = TargetDistanceCm;
+	snapshot->odom_x_cm = odom.x;
+	snapshot->odom_y_cm = odom.y;
+	snapshot->odom_distance_cm = odom.distance;
+	snapshot->run_state = (uint8_t)rS;
+	snapshot->control_mode = (uint8_t)ControlMode;
+	snapshot->auto_step = (uint8_t)AutoStep;
+	snapshot->direction = is_up;
+	snapshot->straight_enabled = is_straight;
+	snapshot->turn_enabled = is_turn;
+}
+#endif
