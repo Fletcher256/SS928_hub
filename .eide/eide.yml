@@ -15,7 +15,6 @@ virtualFolder:
     - path: HARDWARE/MPU6050.c
     - path: HARDWARE/OLED.c
     - path: HARDWARE/PWMO.c
-    - path: HARDWARE/Rotary_encoder.c
     - path: HARDWARE/USART.c
     - path: main.c
     - path: LIBS/misc.c
@@ -67,6 +66,8 @@ virtualFolder:
     - path: Core/Timers.c
     - path: HARDWARE/LED.c
     - path: HARDWARE/LED.h
+    - path: HARDWARE/YH8.c
+    - path: HARDWARE/YH8.h
   folders:
     - name: libs
       files:

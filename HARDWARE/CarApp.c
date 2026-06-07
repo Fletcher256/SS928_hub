@@ -5,6 +5,7 @@
 #include "Timers.h"
 #include "Motors.h"
 #include "PWMO.h"
+#include "YH8.h"
 //#include "OLED.h"
 #include "USART.h"
 #include "MPU6050.h"
@@ -75,6 +76,7 @@ void CarApp_Run(void)
 	KalmanFilter_Init(&Kal_Yaw,0.5,0.1,1,100);   // q=0.5: 绋虫€佸鐩妦83%,蹇€熻窡韪獃aw鍙樺寲(鍘?.01澶參浠呭惛鏀?%)
 	KalmanFilter_Init(&Kal_Roll,0.01,0.1,1,100);
 	KalmanFilter_Init(&Kal_Pitch,0.01,0.1,1,100);
+	YH8_Init();
 	LED_Init();
 	USART3_Init();
 	//MPU6050_Init();
@@ -95,6 +97,7 @@ void CarApp_Run(void)
 	SetStandbyMode();
 	RefreshCommandWatchdog();
 	char commandBuffer[128];
+	YH8_Set(1); // RS0102YH8: 1 for car mode, 0 for programming mode. Set to car mode.
 
 	//鏍￠獙MPU6050鏄惁鎴愬姛璇诲埌鏁版嵁銆?
 	USART3_printf("Everything is ready!\r\n");
