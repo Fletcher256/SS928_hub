@@ -5,6 +5,8 @@ void SetTIM2CH1ARR(uint16_t t);
 
 void ServoPWM_Init(void);
 
+void ServoPWM_Service(void);
+
 void SetTIM2CH2ARR(uint16_t t);
 
 void SetServoRotation(float Angle);
@@ -22,6 +24,8 @@ uint16_t ServoPWM_GetArr(void);
 uint16_t ServoPWM_GetCcr2(void);
 
 uint16_t ServoPWM_GetCcer(void);
+
+uint16_t ServoPWM_GetRecoverCount(void);
 
 void SetTIM2CH3ARR(uint16_t t);
 

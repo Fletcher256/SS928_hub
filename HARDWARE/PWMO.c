@@ -13,6 +13,7 @@
 static uint16_t ServoLastPulseUs = 1500U;
 static float ServoLastAngle = 90.0f;
 static uint8_t ServoPWMInitialized = 0;
+static uint16_t ServoRecoverCount = 0;
 
 static uint16_t ServoAngleToPulse(float Angle)
 {
@@ -49,6 +50,14 @@ uint8_t ServoPWM_IsHealthy(void)
 	{
 		return 0;
 	}
+	if(((GPIOA->CRL >> 4U) & 0x0FU) != 0x0BU)
+	{
+		return 0;
+	}
+	if((TIM2->CCR2 < SERVO_MIN_PULSE_US) || (TIM2->CCR2 > SERVO_MAX_PULSE_US))
+	{
+		return 0;
+	}
 	return 1;
 }
 
@@ -57,6 +66,19 @@ static void ServoPWM_RecoverIfNeeded(void)
 	if(!ServoPWM_IsHealthy())
 	{
 		ServoPWM_Init();
+		ServoRecoverCount++;
+	}
+}
+
+void ServoPWM_Service(void)
+{
+	if(!ServoPWM_IsHealthy())
+	{
+		ServoPWM_RecoverIfNeeded();
+	}
+	else
+	{
+		TIM_SetCompare2(TIM2, ServoLastPulseUs);
 	}
 }
 
@@ -242,5 +264,10 @@ uint16_t ServoPWM_GetCcr2(void)
 uint16_t ServoPWM_GetCcer(void)
 {
 	return (uint16_t)TIM2->CCER;
+}
+
+uint16_t ServoPWM_GetRecoverCount(void)
+{
+	return ServoRecoverCount;
 }
 

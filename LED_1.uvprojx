@@ -661,6 +661,56 @@
               <FilePath>.\main.c</FilePath>
             </File>
             <File>
+              <FileName>CarApp.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Core\CarApp.c</FilePath>
+            </File>
+            <File>
+              <FileName>CarApp.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\CarApp.h</FilePath>
+            </File>
+            <File>
+              <FileName>CarControl.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\CarControl.h</FilePath>
+            </File>
+            <File>
+              <FileName>CarControl.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Core\CarControl.c</FilePath>
+            </File>
+            <File>
+              <FileName>CarProtocol.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Core\CarProtocol.c</FilePath>
+            </File>
+            <File>
+              <FileName>CarProtocol.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\CarProtocol.h</FilePath>
+            </File>
+            <File>
+              <FileName>CommandParser.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Core\CommandParser.c</FilePath>
+            </File>
+            <File>
+              <FileName>CommandParser.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\CommandParser.h</FilePath>
+            </File>
+            <File>
+              <FileName>HeadingControl.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Core\HeadingControl.c</FilePath>
+            </File>
+            <File>
+              <FileName>HeadingControl.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\HeadingControl.h</FilePath>
+            </File>
+            <File>
               <FileName>stm32f10x_conf.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\USER\stm32f10x_conf.h</FilePath>
