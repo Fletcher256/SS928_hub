@@ -15,7 +15,7 @@ int8_t is_straight = 0;
 RS rS = STANDBY;
 
 float Angle = 0.0f;
-MPU6050 MM;
+BMI270 MM;
 
 float New_Yaw = 0.0f;
 float New_Roll = 0.0f;

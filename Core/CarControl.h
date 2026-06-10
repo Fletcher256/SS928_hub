@@ -1,7 +1,7 @@
 #ifndef _CAR_CONTROL_H_
 #define _CAR_CONTROL_H_
 
-#include "MPU6050.h"
+#include "BMI270/bmi270_driver.h"
 #include "filter.h"
 
 #include <stdint.h>
@@ -35,7 +35,7 @@ extern int8_t is_straight;
 extern RS rS;
 
 extern float Angle;
-extern MPU6050 MM;
+extern BMI270 MM;
 extern float New_Yaw;
 extern float New_Roll;
 extern float New_Pitch;

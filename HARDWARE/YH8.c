@@ -2,7 +2,7 @@
 
 #include "YH8.h"
 
-void YHB_Init()
+void YH8_Init(void)
 {
 	//APB2外设挂载的GPIO1口的RCC时钟使能端:开启。之后这个IO口就使用这个时钟信号来对IO口进行控制。
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA,ENABLE);

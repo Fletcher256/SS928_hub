@@ -53,3 +53,17 @@ Chief System Architect
 接口定义
 
 代码永远排在最后。
+
+## Agent skills
+
+### Issue tracker
+
+基于 GitHub Issues 进行任务跟踪，仓库 `Fletcher256/SS928_hub`，通过 `gh` CLI 操作。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用默认标签名：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+单上下文布局：一份 `CONTEXT.md` + `docs/adr/` 存放于仓库根目录。详见 `docs/agents/domain.md`。

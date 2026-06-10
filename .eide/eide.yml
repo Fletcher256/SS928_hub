@@ -12,7 +12,6 @@ virtualFolder:
     - path: HARDWARE/generic.c
     - path: HARDWARE/Keys.c
     - path: HARDWARE/Motors.c
-    - path: HARDWARE/MPU6050.c
     - path: HARDWARE/OLED.c
     - path: HARDWARE/PWMO.c
     - path: HARDWARE/USART.c
@@ -64,10 +63,17 @@ virtualFolder:
     - path: LIBS/stm32f10x_wwdg.c
     - path: LIBS/stm32f10x_wwdg.h
     - path: Core/Timers.c
+    - path: Core/CarControl.c
+    - path: Core/CarProtocol.c
+    - path: Core/CommandParser.c
+    - path: Core/HeadingControl.c
     - path: HARDWARE/LED.c
     - path: HARDWARE/LED.h
     - path: HARDWARE/YH8.c
     - path: HARDWARE/YH8.h
+    - path: HARDWARE/CarApp.c
+    - path: HARDWARE/BMI270/bmi270_driver.c
+    - path: HARDWARE/BMI270/bmi270_config.c
   folders:
     - name: libs
       files:

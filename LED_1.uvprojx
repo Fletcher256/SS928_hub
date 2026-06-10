@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>.\LIBS;.\START;.\USER;.\Core;.\HARDWARE;.\DMP</IncludePath>
+              <IncludePath>.\LIBS;.\START;.\USER;.\Core;.\HARDWARE</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -663,7 +663,7 @@
             <File>
               <FileName>CarApp.c</FileName>
               <FileType>1</FileType>
-              <FilePath>.\Core\CarApp.c</FilePath>
+              <FilePath>.\HARDWARE\CarApp.c</FilePath>
             </File>
             <File>
               <FileName>CarApp.h</FileName>
@@ -804,6 +804,16 @@
               <FileName>LED.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\HARDWARE\LED.h</FilePath>
+            </File>
+            <File>
+              <FileName>YH8.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\HARDWARE\YH8.c</FilePath>
+            </File>
+            <File>
+              <FileName>YH8.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\HARDWARE\YH8.h</FilePath>
             </File>
           </Files>
         </Group>

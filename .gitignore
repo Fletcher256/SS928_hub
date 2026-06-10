@@ -10,6 +10,8 @@
 /obj
 /out
 /tools
+/DMP
+
 
 # python cache
 __pycache__/

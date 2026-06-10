@@ -1,7 +1,15 @@
 {
     "folders": [
         {
+            "name": "car_6050_v2_copy",
             "path": "."
+        },
+        {
+            "name": "JDY-24M超级蓝牙手册-V1.721版本",
+            "path": "../../RESOURCES/模块资料/JDY-24M超级蓝牙手册-V1.721版本"
+        },
+        {
+            "path": "../../RESOURCES/模块资料/BMI270"
         }
     ],
     "settings": {

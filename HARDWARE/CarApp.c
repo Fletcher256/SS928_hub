@@ -8,7 +8,7 @@
 #include "YH8.h"
 //#include "OLED.h"
 #include "USART.h"
-#include "MPU6050.h"
+#include "BMI270/bmi270_driver.h"
 #include "filter.h"
 #include "LED.h"
 
@@ -48,7 +48,7 @@ static void ServiceMpuTask(void)
 
 	if(elapsedMs > 0)
 	{
-		MPU6050_Get_AngleDt(&MM, (float)elapsedMs * 0.001f);
+		BMI270_Get_AngleDt(&MM, (float)elapsedMs * 0.001f);
 		New_Pitch = KalmanFilter_Update(&Kal_Pitch,MM.pitch);
 		New_Roll = KalmanFilter_Update(&Kal_Roll,MM.roll);
 		New_Yaw = KalmanFilter_Update(&Kal_Yaw,MM.yaw);
@@ -80,7 +80,7 @@ void CarApp_Run(void)
 	LED_Init();
 	USART3_Init();
 	//MPU6050_Init();
-	MPU6050_init(GPIOB, GPIO_Pin_0, GPIO_Pin_1);
+	BMI270_init(GPIOB, GPIO_Pin_0, GPIO_Pin_1);
 	//涔熶篃璁告垜浠渶瑕佸MPU6050杩涜涓€涓潤鎬佹牎鍑嗐€?
 	//MPU6050_Calibration();
 	//mpu_dmp_init(GPIOB,GPIO_Pin_1,GPIO_Pin_0);
@@ -97,7 +97,7 @@ void CarApp_Run(void)
 	SetStandbyMode();
 	RefreshCommandWatchdog();
 	char commandBuffer[128];
-	YH8_Set(1); // RS0102YH8: 1 for car mode, 0 for programming mode. Set to car mode.
+	SetYH8(1); // RS0102YH8: 1 for car mode, 0 for programming mode. Set to car mode.
 
 	//鏍￠獙MPU6050鏄惁鎴愬姛璇诲埌鏁版嵁銆?
 	USART3_printf("Everything is ready!\r\n");
