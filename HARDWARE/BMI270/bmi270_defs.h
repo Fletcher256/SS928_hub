@@ -125,6 +125,7 @@
 #define BMI2_FIFO_CONFIG_0_ADDR   UINT8_C(0x48)
 #define BMI2_FIFO_CONFIG_1_ADDR   UINT8_C(0x49)
 #define BMI2_SATURATION_ADDR      UINT8_C(0x4A)
+#define BMI2_AUX_IF_CONF_ADDR     UINT8_C(0x4B)  /*!< AUX interface config (bit0=aux_en) */
 #define BMI2_INT1_IO_CTRL_ADDR    UINT8_C(0x53)
 #define BMI2_INT2_IO_CTRL_ADDR    UINT8_C(0x54)
 #define BMI2_INT_LATCH_ADDR       UINT8_C(0x55)
@@ -188,7 +189,8 @@
 #define BMI2_TEMP_EN_POS        UINT8_C(0x03)
 
 /*! @name Init control mask */
-#define BMI2_CONF_LOAD_EN_MASK  UINT8_C(0x01)
+#define BMI2_CONF_LOAD_EN_MASK  UINT8_C(0x01)  /*!< bit0: enable config file load */
+#define BMI2_AUX_DISABLE_MASK   UINT8_C(0x02)  /*!< bit1: disable AUX init during config load */
 
 /*! @name Config load status */
 #define BMI2_CONFIG_LOAD_SUCCESS    UINT8_C(1)

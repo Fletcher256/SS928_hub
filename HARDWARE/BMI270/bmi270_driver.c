@@ -21,6 +21,7 @@
 #include "bmi270_defs.h"
 #include "bmi270_config.h"
 #include "../_MyI2C_.h"
+#include "../USART.h"
 #include <math.h>
 #include <stdlib.h>
 #include "../generic.h"
@@ -43,7 +44,7 @@ static i2cbus_struct bmi270_i2cbus;
     MYI2C_Read_Reg_Continue_Status(&bmi270_i2cbus, reg, len, buf)
 
 /* I2C address (SDO=GND → 0x68, SDO=VDDIO → 0x69) */
-#define BMI270_I2C_ADDR  0x68
+#define BMI270_I2C_ADDR  0x69
 
 /*===========================================================================*/
 /*! @name     Bosch SensorAPI Callback Layer                                  */
@@ -144,15 +145,17 @@ static int8_t bmi2_soft_reset(void)
  */
 static int8_t bmi2_upload_config(void)
 {
-    uint8_t init_ctrl;
     uint8_t internal_status;
     uint16_t index;
     uint8_t load_attempts;
+    uint8_t addr_buf[2];
+
+    /* Step 0: Read current state for diag */
+    internal_status = (uint8_t)(BMI270_READ_REG(BMI2_INTERNAL_STATUS_ADDR) & 0xFF);
+    USART3_printf("[BMI270] Pre-upload STATUS: 0x%02X\r\n", internal_status);
 
     /* Step 1: Check if config is already loaded */
-    internal_status = (uint8_t)(BMI270_READ_REG(BMI2_INTERNAL_STATUS_ADDR) & 0xFF);
     if (internal_status == BMI2_INIT_OK) {
-        /* Already initialized (e.g. after soft reset with fast power-up) */
         return BMI2_OK;
     }
 
@@ -163,35 +166,76 @@ static int8_t bmi2_upload_config(void)
     /* Step 3: Switch to page 0 */
     BMI270_WRITE_REG(BMI2_FEAT_PAGE_ADDR, BMI2_PAGE_0);
 
-    /* Step 4: Enable config file load */
-    BMI270_WRITE_REG(BMI2_INIT_CTRL_ADDR, BMI2_CONF_LOAD_EN_MASK);
-
-    /* Step 5: Burst-write the 8192-byte configuration file
-     *         BMI270 INIT_DATA (0x5E) is a "trap" address — it does NOT
-     *         auto-increment. Each byte must be written as a separate
-     *         register write to 0x5E. */
-    for (index = 0; index < BMI270_CONFIG_SIZE; index++) {
-        BMI270_WRITE_REG(BMI2_INIT_DATA_ADDR, bmi270_config_file[index]);
-    }
-
-    /* Step 6: Clear init control */
+    /* Step 4: DISABLE config load before writing data
+     *         (official API: set_config_load(DISABLE) first) */
     BMI270_WRITE_REG(BMI2_INIT_CTRL_ADDR, 0x00);
+    USART3_printf("[BMI270] INIT_CTRL disabled before upload\r\n");
 
-    /* Step 7: Poll INTERNAL_STATUS for config load completion
-     *         Bit 4 of init_ctrl = config load success
-     *         internal_status should become BMI2_INIT_OK (0x01) */
-    BMI270_DELAY_MS(150);
+    /* Step 5: Upload config file using INIT_ADDR_0/1 + INIT_DATA burst.
+     *         The INIT_DATA (0x5E) register is a trap address — it does NOT
+     *         auto-increment by itself. We must set INIT_ADDR_0 (0x5B) and
+     *         INIT_ADDR_1 (0x5C) to select the target word address first,
+     *         then write 2 bytes (one word) to INIT_DATA.
+     *         After each word write, the internal address auto-increments. */
+    USART3_printf("[BMI270] Writing %u bytes via INIT_ADDR_0/1...\r\n", BMI270_CONFIG_SIZE);
+    for (index = 0; index < BMI270_CONFIG_SIZE; index += 2) {
+        uint16_t word_addr = index / 2;
 
-    for (load_attempts = 0; load_attempts < 20; load_attempts++) {
-        internal_status = (uint8_t)(BMI270_READ_REG(BMI2_INTERNAL_STATUS_ADDR) & 0xFF);
+        /* Set word address: INIT_ADDR_0 = bits[3:0], INIT_ADDR_1 = bits[11:4] */
+        addr_buf[0] = (uint8_t)(word_addr & 0x000F);
+        addr_buf[1] = (uint8_t)((word_addr >> 4) & 0xFF);
 
-        if (internal_status == BMI2_INIT_OK) {
-            break;
+        BMI270_WRITE_REG(BMI2_INIT_ADDR_0, addr_buf[0]);
+        BMI270_WRITE_REG(BMI2_INIT_ADDR_1, addr_buf[1]);
+
+        /* Write 2 bytes (one word) to INIT_DATA */
+        if ((index + 1) < BMI270_CONFIG_SIZE) {
+            /* Full word: write both bytes (burst auto-increments by 1 word) */
+            uint8_t word_buf[2];
+            word_buf[0] = bmi270_config_file[index];
+            word_buf[1] = bmi270_config_file[index + 1];
+            MYI2C_Write_Reg_Continue(&bmi270_i2cbus, BMI2_INIT_DATA_ADDR, word_buf, 2);
+        } else {
+            /* Last odd byte (should not happen, config is even length) */
+            BMI270_WRITE_REG(BMI2_INIT_DATA_ADDR, bmi270_config_file[index]);
         }
-        BMI270_DELAY_MS(10);
+    }
+    USART3_printf("[BMI270] Write complete, enabling config load...\r\n");
+
+    /* Step 6: ENABLE config load — this triggers the firmware to process data */
+    BMI270_WRITE_REG(BMI2_INIT_CTRL_ADDR, BMI2_CONF_LOAD_EN_MASK);
+    {
+        uint8_t ctrl = (uint8_t)(BMI270_READ_REG(BMI2_INIT_CTRL_ADDR) & 0xFF);
+        USART3_printf("[BMI270] INIT_CTRL after enable: 0x%02X\r\n", ctrl);
     }
 
-    if (internal_status != BMI2_INIT_OK) {
+    /* Step 7: Re-enable advanced power save */
+    BMI270_WRITE_REG(BMI2_PWR_CONF_ADDR, 0x01);
+
+    /* Step 8: Poll INTERNAL_STATUS for init complete (0x01 = BMI2_INIT_OK) */
+    {
+        uint8_t prev_status = 0xFF;
+        for (load_attempts = 0; load_attempts < 50; load_attempts++) {
+            BMI270_DELAY_MS(20);
+            internal_status = (uint8_t)(BMI270_READ_REG(BMI2_INTERNAL_STATUS_ADDR) & 0xFF);
+
+            /* Mask to lower nibble for status code comparison */
+            if ((internal_status & 0x0F) == BMI2_INIT_OK) {
+                USART3_printf("[BMI270] Init OK at attempt %d\r\n", load_attempts);
+                break;
+            }
+            /* Log status changes */
+            if (internal_status != prev_status) {
+                USART3_printf("[BMI270] STATUS change: 0x%02X at attempt %d\r\n",
+                              internal_status, load_attempts);
+                prev_status = internal_status;
+            }
+        }
+    }
+
+    if ((internal_status & 0x0F) != BMI2_INIT_OK) {
+        USART3_printf("[BMI270] FAIL: STATUS=0x%02X (need 0x01), attempts=%d\r\n",
+                      internal_status, load_attempts);
         return BMI2_E_CONFIG_LOAD;
     }
 
@@ -474,18 +518,24 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
     bmi2_soft_reset();
     BMI270_DELAY_MS(50);
 
-    /* 3. Verify chip ID */
+    /* === DIAGNOSTIC STEP 1: Chip ID === */
     chip_id = (uint8_t)(BMI270_READ_REG(BMI2_CHIP_ID_ADDR) & 0xFF);
+    USART3_printf("[BMI270] Chip ID: 0x%02X (expected 0x%02X)\r\n", chip_id, BMI270_CHIP_ID);
     if (chip_id != BMI270_CHIP_ID) {
-        /* Chip not found — return silently (application can check via BMI270_ID()) */
+        //因为SDO拉高/悬空了导致这个端口的电平时高电平,地址是0X69。。若SDO拉低是0X68
+        USART3_printf("[BMI270] FAIL: chip not found or wrong ID!,Error ID: 0x%02X\r\n", chip_id);
         return;
     }
+    USART3_printf("[BMI270] Chip ID OK\r\n");
 
-    /* 4. Upload configuration file (the critical 8KB blob) */
+    /* === DIAGNOSTIC STEP 2: Config upload === */
+    USART3_printf("[BMI270] Uploading config (%u bytes)...\r\n", BMI270_CONFIG_SIZE);
     rslt = bmi2_upload_config();
     if (rslt != BMI2_OK) {
-        return;  /* Config upload failed */
+        USART3_printf("[BMI270] FAIL: config upload error %d\r\n", rslt);
+        return;
     }
+    USART3_printf("[BMI270] Config upload OK\r\n");
 
     /* 5. Configure accelerometer: 200Hz, ±4G, Normal AVG4, High Performance */
     bmi2_set_accel_config(BMI2_ACC_ODR_200HZ,
@@ -520,12 +570,19 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
     /* 8. Wait for sensor stabilization */
     BMI270_DELAY_MS(100);
 
-    /* 9. Gyro zero-offset calibration (3 attempts) */
+    /* === DIAGNOSTIC STEP 3: Gyro calibration === */
     for (i = 0; i < 3; i++) {
         if (BMI270_SoftCalibrate_Z(200) == 0) {
             break;
         }
     }
+    if (i < 3) {
+        USART3_printf("[BMI270] Gyro cal OK (attempt %d)\r\n", i + 1);
+    } else {
+        USART3_printf("[BMI270] WARN: gyro cal failed, using raw offsets\r\n");
+    }
+    USART3_printf("[BMI270] Gyro offsets: X=%d Y=%d Z=%d\r\n",
+                  (int)gyro_zero_x, (int)gyro_zero_y, (int)gyro_zero_z);
 
     /* 10. Initialize filters */
 #if BMI270_USE_Filter
@@ -536,6 +593,45 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
     PT1Filter_InitWithFreq(&pt1_filter_gy, 120, 200);
     PT1Filter_InitWithFreq(&pt1_filter_gz, 120, 200);
 #endif
+
+    /* === DIAGNOSTIC STEP 4: Verify power + data path === */
+    {
+        uint8_t buf[12];
+        uint8_t pwr_ctrl, status_reg, read_rslt;
+        int16_t ax, ay, az, gx, gy, gz;
+
+        /* 4a: Read back PWR_CTRL to verify sensors are enabled */
+        pwr_ctrl = (uint8_t)(BMI270_READ_REG(BMI2_PWR_CTRL_ADDR) & 0xFF);
+        USART3_printf("[BMI270] PWR_CTRL(0x7D)=0x%02X (expect 0x06: acc+gyr en)\r\n", pwr_ctrl);
+
+        /* 4b: Read STATUS for data ready */
+        status_reg = (uint8_t)(BMI270_READ_REG(BMI2_STATUS_ADDR) & 0xFF);
+        USART3_printf("[BMI270] STATUS(0x03)=0x%02X (bit7=DRDY_ACC,bit6=DRDY_GYR)\r\n", status_reg);
+
+        /* 4c: Try burst read with status check */
+        read_rslt = BMI270_READ_REG_CONTINUE_STATUS(BMI2_ACC_X_LSB_ADDR, 12, buf);
+        USART3_printf("[BMI270] Burst read result: %d (0=OK, 1=NACK)\r\n", read_rslt);
+
+        /* 4d: Also try single-byte reads */
+        {
+            uint8_t a0 = (uint8_t)(BMI270_READ_REG(0x0C) & 0xFF);
+            uint8_t a1 = (uint8_t)(BMI270_READ_REG(0x0D) & 0xFF);
+            uint8_t a2 = (uint8_t)(BMI270_READ_REG(0x0E) & 0xFF);
+            USART3_printf("[BMI270] Single reads: 0x0C=0x%02X 0x0D=0x%02X 0x0E=0x%02X\r\n",
+                          a0, a1, a2);
+        }
+
+        ax = ((int16_t)(buf[1] << 8) | buf[0]);
+        ay = ((int16_t)(buf[3] << 8) | buf[2]);
+        az = ((int16_t)(buf[5] << 8) | buf[4]);
+        gx = ((int16_t)(buf[7] << 8) | buf[6]);
+        gy = ((int16_t)(buf[9] << 8) | buf[8]);
+        gz = ((int16_t)(buf[11] << 8) | buf[10]);
+        USART3_printf("[BMI270] Raw: AccX=%d AccY=%d AccZ=%d | GyrX=%d GyrY=%d GyrZ=%d\r\n",
+                      (int)ax, (int)ay, (int)az, (int)gx, (int)gy, (int)gz);
+    }
+
+    USART3_printf("[BMI270] Init complete — all checks passed\r\n");
 }
 
 /*===========================================================================*/

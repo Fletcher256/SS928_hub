@@ -9,6 +9,7 @@
 //#include "OLED.h"
 #include "USART.h"
 #include "BMI270/bmi270_driver.h"
+#include "_MyI2C_.h"
 #include "filter.h"
 #include "LED.h"
 
@@ -79,7 +80,23 @@ void CarApp_Run(void)
 	YH8_Init();
 	LED_Init();
 	USART3_Init();
-	//MPU6050_Init();
+	/* I2C diag: scan + try reading Chip ID directly */
+	{
+		i2cbus_struct scan_bus;
+		uint8_t addr;
+		uint16_t chip_id_raw;
+
+		/* Try with longer delay (10 instead of 5) */
+		MyI2C_Init(&scan_bus, GPIOB, GPIO_Pin_0, GPIOB, GPIO_Pin_1, 0x69, 10);
+		addr = MYI2C_Add_Scan(&scan_bus);
+		USART3_printf("[SCAN] I2C device at 0x%02X\r\n", addr);
+
+		/* Direct Chip ID read, no soft-reset first */
+		chip_id_raw = MYI2C_Read_Reg(&scan_bus, 0x00);
+		USART3_printf("[DIAG] Raw Chip ID read: 0x%04X → 0x%02X\r\n",
+		              chip_id_raw, (uint8_t)(chip_id_raw & 0xFF));
+	}
+	//aMPU6050_Init();
 	BMI270_init(GPIOB, GPIO_Pin_0, GPIO_Pin_1);
 	//涔熶篃璁告垜浠渶瑕佸MPU6050杩涜涓€涓潤鎬佹牎鍑嗐€?
 	//MPU6050_Calibration();

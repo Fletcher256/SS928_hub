@@ -776,11 +776,6 @@
               <FilePath>.\HARDWARE\Motors.h</FilePath>
             </File>
             <File>
-              <FileName>MPU6050.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\HARDWARE\MPU6050.c</FilePath>
-            </File>
-            <File>
               <FileName>_MyI2C_.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\HARDWARE\_MyI2C_.c</FilePath>
