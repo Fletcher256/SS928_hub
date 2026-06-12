@@ -61,6 +61,10 @@ static uint32_t LastCommandTick = 0;
 static uint32_t ActionStartTick = 0;
 static float TargetDistanceCm = 0.0f;
 
+#define ACKERMANN_CENTER_DEG      90.0f
+#define ACKERMANN_MIN_STEER_DEG   0.5f
+#define DEG_TO_RAD                0.01745329252f
+
 static float AbsFloat(float value)
 {
 	return value < 0.0f ? -value : value;
@@ -129,7 +133,37 @@ void SetSteeringAngle(float angle)
 
 static void CenterSteering(void)
 {
-	SetSteeringAngle(90.0f);
+	SetSteeringAngle(ACKERMANN_CENTER_DEG);
+}
+
+static void ApplyAckermannSpeedScale(float steerAngle)
+{
+	float steerOffset = steerAngle - ACKERMANN_CENTER_DEG;
+	float tanSteer;
+	float radius;
+	float halfTrack;
+	float leftScale;
+	float rightScale;
+
+	if(AbsFloat(steerOffset) < ACKERMANN_MIN_STEER_DEG)
+	{
+		Motor_ResetSpeedScale();
+		return;
+	}
+
+	tanSteer = tanf(steerOffset * DEG_TO_RAD);
+	if(AbsFloat(tanSteer) < 0.0001f)
+	{
+		Motor_ResetSpeedScale();
+		return;
+	}
+
+	radius = ACKERMANN_WHEEL_BASE_CM / tanSteer;
+	halfTrack = WHEEL_TRACK_CM * 0.5f;
+	leftScale = (radius - halfTrack) / radius;
+	rightScale = (radius + halfTrack) / radius;
+
+	Motor_SetSpeedScale(leftScale, rightScale);
 }
 
 static void HardStopMotion(void)
@@ -158,6 +192,7 @@ void PrintTelemetry(void)
 void SetStandbyMode(void)
 {
 	HardStopMotion();
+	ServoPWM_Detach();
 	rS = STANDBY;
 	SetLEDs(GPIO_Pin_14);
 }
@@ -172,6 +207,7 @@ void SetManualMode(void)
 	is_straight = 0;
 	is_turn = 0;
 	headingPID.CrossTrackEnable = 0;
+	Motor_ResetSpeedScale();
 }
 
 void SetManualModeIfIdle(void)
@@ -271,6 +307,7 @@ static uint8_t PrepareYawTurn(float relativeYawDeg)
 	is_straight = 0;
 	is_turn = 1;
 	headingPID.CrossTrackEnable = 0;
+	Motor_ResetSpeedScale();
 	ActionStartTick = ControlTicks;
 	EnsureAutoSpeed();
 	return 1;
@@ -328,6 +365,7 @@ uint8_t StartArcDrive(float distanceCm, float steerDeg)
 	is_turn = 0;
 	headingPID.CrossTrackEnable = 0;
 	SetSteeringAngle(steerDeg);
+	ApplyAckermannSpeedScale(Angle);
 	Odometry_Reset();
 	ActionStartTick = ControlTicks;
 	EnsureAutoSpeed();
@@ -544,6 +582,7 @@ void SpeedAcc(void)
 		rank += SPEEDSTEP;
 		if(rank > 720) rank = 720;
 		SpeedRank = ABSTRACT(is_up) * rank;
+		SetSteeringAngle(Angle);
 	}
 }
 
@@ -596,6 +635,10 @@ void SetSpeedRank(int8_t level)
 	if(level < 7)
 	{
 		SpeedRank = is_up * level * SPEEDSTEP;
+		if(level > 0)
+		{
+			SetSteeringAngle(Angle);
+		}
 	}
 }
 

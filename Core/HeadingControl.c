@@ -6,6 +6,7 @@
 
 void Set_Straight(void)
 {
+	Motor_ResetSpeedScale();
 	is_straight = 1;
 	is_turn = 0;
 	Org_Yaw = New_Yaw;

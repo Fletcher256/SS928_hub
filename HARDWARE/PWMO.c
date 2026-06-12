@@ -13,6 +13,7 @@
 static uint16_t ServoLastPulseUs = 1500U;
 static float ServoLastAngle = 90.0f;
 static uint8_t ServoPWMInitialized = 0;
+static uint8_t ServoPWMAttached = 1;
 static uint16_t ServoRecoverCount = 0;
 
 static uint16_t ServoAngleToPulse(float Angle)
@@ -30,6 +31,8 @@ static uint16_t ServoAngleToPulse(float Angle)
 
 uint8_t ServoPWM_IsHealthy(void)
 {
+	uint8_t pa1Mode;
+
 	if(!ServoPWMInitialized)
 	{
 		return 0;
@@ -46,17 +49,33 @@ uint8_t ServoPWM_IsHealthy(void)
 	{
 		return 0;
 	}
-	if((TIM2->CCER & TIM_CCER_CC2E) == 0U)
-	{
-		return 0;
-	}
-	if(((GPIOA->CRL >> 4U) & 0x0FU) != 0x0BU)
-	{
-		return 0;
-	}
 	if((TIM2->CCR2 < SERVO_MIN_PULSE_US) || (TIM2->CCR2 > SERVO_MAX_PULSE_US))
 	{
 		return 0;
+	}
+
+	pa1Mode = (uint8_t)((GPIOA->CRL >> 4U) & 0x0FU);
+	if(ServoPWMAttached)
+	{
+		if((TIM2->CCER & TIM_CCER_CC2E) == 0U)
+		{
+			return 0;
+		}
+		if(pa1Mode != 0x0BU)
+		{
+			return 0;
+		}
+	}
+	else
+	{
+		if((TIM2->CCER & TIM_CCER_CC2E) != 0U)
+		{
+			return 0;
+		}
+		if(pa1Mode != 0x03U)
+		{
+			return 0;
+		}
 	}
 	return 1;
 }
@@ -76,10 +95,50 @@ void ServoPWM_Service(void)
 	{
 		ServoPWM_RecoverIfNeeded();
 	}
-	else
+}
+
+void ServoPWM_Attach(void)
+{
+	GPIO_InitTypeDef GPIO_InitStructure;
+
+	ServoPWMAttached = 1;
+	if(!ServoPWMInitialized)
 	{
-		TIM_SetCompare2(TIM2, ServoLastPulseUs);
+		ServoPWM_Init();
+		return;
 	}
+
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
+	GPIO_InitStructure.GPIO_Mode = ServoPWMAttached ? GPIO_Mode_AF_PP : GPIO_Mode_Out_PP;
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+	TIM_SetCompare2(TIM2, ServoLastPulseUs);
+	TIM_CCxCmd(TIM2, TIM_Channel_2, TIM_CCx_Enable);
+}
+
+void ServoPWM_Detach(void)
+{
+	GPIO_InitTypeDef GPIO_InitStructure;
+
+	if(!ServoPWMInitialized)
+	{
+		ServoPWMAttached = 0;
+		return;
+	}
+
+	TIM_CCxCmd(TIM2, TIM_Channel_2, TIM_CCx_Disable);
+
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
+	GPIO_ResetBits(GPIOA, GPIO_Pin_1);
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_Init(GPIOA, &GPIO_InitStructure);
+	GPIO_ResetBits(GPIOA, GPIO_Pin_1);
+
+	ServoPWMAttached = 0;
 }
 
 void ServoPWM_Init()
@@ -98,6 +157,10 @@ void ServoPWM_Init()
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
 	
 	GPIO_Init(GPIOA,&GPIO_InitStructure);
+	if(!ServoPWMAttached)
+	{
+		GPIO_ResetBits(GPIOA, GPIO_Pin_1);
+	}
 	
 	//用的内部时钟,挂载总线为1,计时器为2
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2,ENABLE);
@@ -158,10 +221,10 @@ void ServoPWM_Init()
 //	TIM_OCInitStructure.TIM_OutputNState;
 
 	//输出使能
-	TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;
+	TIM_OCInitStructure.TIM_OutputState = ServoPWMAttached ? TIM_OutputState_Enable : TIM_OutputState_Disable;
 	
 	//pulse是输出脉冲控制,说白了就是配CCR。
-	TIM_OCInitStructure.TIM_Pulse =0;
+	TIM_OCInitStructure.TIM_Pulse = ServoLastPulseUs;
 	
 	//这里TIM2的CH1口是硬编码的,要么AFIO映射其他口(表中言之可用的口),要么就没辙。。
 	//用4个PWM口来控制舵机进行转向。
@@ -178,6 +241,14 @@ void ServoPWM_Init()
 	TIM_SetCompare2(TIM2, ServoLastPulseUs);
 	TIM_GenerateEvent(TIM2, TIM_EventSource_Update);
 	ServoPWMInitialized = 1;
+	if(ServoPWMAttached)
+	{
+		ServoPWM_Attach();
+	}
+	else
+	{
+		ServoPWM_Detach();
+	}
 }
 
 //设置TIM2各路比较器的值
@@ -215,7 +286,7 @@ void SetServoRotation(float Angle)
 	}
 	//实际测试的时候我们可以发现,若以小车的中线为90度的话,偏移度在-60~+60度之间。
 	pwmHealthy = ServoPWM_IsHealthy();
-	if(pwmHealthy)
+	if(pwmHealthy && ServoPWMAttached)
 	{
 		float diff = Angle - ServoLastAngle;
 		if(diff < 0.0f)
@@ -233,7 +304,16 @@ void SetServoRotation(float Angle)
 	{
 		ServoPWM_RecoverIfNeeded();
 	}
+	if(!ServoPWMAttached)
+	{
+		ServoPWM_Attach();
+	}
 	TIM_SetCompare2(TIM2, ServoLastPulseUs);
+}
+
+uint8_t ServoPWM_IsAttached(void)
+{
+	return ServoPWMAttached;
 }
 
 float ServoPWM_GetLastAngle(void)
