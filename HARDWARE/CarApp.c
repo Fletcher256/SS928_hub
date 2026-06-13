@@ -5,7 +5,6 @@
 #include "Timers.h"
 #include "Motors.h"
 #include "PWMO.h"
-#include "YH8.h"
 //#include "OLED.h"
 #include "USART.h"
 #include "BMI270/bmi270_driver.h"
@@ -49,6 +48,7 @@ static void ServiceMpuTask(void)
 
 	if(elapsedMs > 0)
 	{
+		BMI270_SetVehicleMoving((aveSpeed > 0.01f) ? 1 : 0);
 		BMI270_Get_AngleDt(&MM, (float)elapsedMs * 0.001f);
 		New_Pitch = KalmanFilter_Update(&Kal_Pitch,MM.pitch);
 		New_Roll = KalmanFilter_Update(&Kal_Roll,MM.roll);
@@ -72,12 +72,13 @@ static void ServiceServoTask(void)
 	}
 }
 
+
 void CarApp_Run(void)
 {
 	KalmanFilter_Init(&Kal_Yaw,0.5,0.1,1,100);   // q=0.5: 绋虫€佸鐩妦83%,蹇€熻窡韪獃aw鍙樺寲(鍘?.01澶參浠呭惛鏀?%)
 	KalmanFilter_Init(&Kal_Roll,0.01,0.1,1,100);
 	KalmanFilter_Init(&Kal_Pitch,0.01,0.1,1,100);
-	YH8_Init();
+
 	LED_Init();
 	USART3_Init();
 	/* I2C diag: scan + try reading Chip ID directly */
@@ -93,8 +94,7 @@ void CarApp_Run(void)
 
 		/* Direct Chip ID read, no soft-reset first */
 		chip_id_raw = MYI2C_Read_Reg(&scan_bus, 0x00);
-		USART3_printf("[DIAG] Raw Chip ID read: 0x%04X → 0x%02X\r\n",
-		              chip_id_raw, (uint8_t)(chip_id_raw & 0xFF));
+		USART3_printf("[DIAG] Raw Chip ID read: 0x%04X → 0x%02X\r\n", chip_id_raw, (uint8_t)(chip_id_raw & 0xFF));
 	}
 	//aMPU6050_Init();
 	BMI270_init(GPIOB, GPIO_Pin_0, GPIO_Pin_1);
@@ -114,7 +114,7 @@ void CarApp_Run(void)
 	SetStandbyMode();
 	RefreshCommandWatchdog();
 	char commandBuffer[128];
-	SetYH8(1); // RS0102YH8: 1 for car mode, 0 for programming mode. Set to car mode.
+	//SetYH8(1); // RS0102YH8: 1 for car mode, 0 for programming mode. Set to car mode.
 
 	//鏍￠獙MPU6050鏄惁鎴愬姛璇诲埌鏁版嵁銆?
 	USART3_printf("Everything is ready!\r\n");

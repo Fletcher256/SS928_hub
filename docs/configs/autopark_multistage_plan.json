@@ -1,0 +1,65 @@
+{
+  "version": "2026-06-12",
+  "purpose": "Conservative multi-stage reverse parking plan for the current YOLO + STM32 small car stack.",
+  "safety": {
+    "requires_arm_flag": true,
+    "requires_arm_file": "/tmp/parking_armed",
+    "vision_lost_stop_sec": 0.5,
+    "pre_steer_settle_sec": 0.5,
+    "uncalibrated_max_motion_steps": 1,
+    "uncalibrated_max_total_cm": 8,
+    "full_run_requires_response_calibration": true
+  },
+  "calibration_primitives": [
+    {
+      "name": "left_arc_probe",
+      "command": "ARC D=-6.0 STE=60 V=1",
+      "promote_to_cm": 12,
+      "success": "abs(corridor_x_err_px) decreases or abs(lat_cm) decreases, and corridor_min_margin_px does not drop by more than 2 px"
+    },
+    {
+      "name": "right_arc_probe",
+      "command": "ARC D=-6.0 STE=120 V=1",
+      "promote_to_cm": 12,
+      "success": "abs(corridor_x_err_px) decreases or abs(lat_cm) decreases, and corridor_min_margin_px does not drop by more than 2 px"
+    },
+    {
+      "name": "straight_probe",
+      "command": "MOVE D=-6.0 V=1",
+      "promote_to_cm": 12,
+      "success": "lon_cm decreases while lateral and line-margin metrics remain bounded"
+    }
+  ],
+  "stages": [
+    {
+      "name": "S0_acquire_and_validate",
+      "entry": "YOLO slot polygon stable for 3 frames and STM32 STAT/PWM_STAT are readable",
+      "output": "WAIT or STOP; no motion"
+    },
+    {
+      "name": "S1_entry_arc",
+      "entry": "response calibration identifies which steering side increases line clearance and reduces approach error",
+      "output": "one calibrated reverse arc step at 6-12 cm, later 20 cm only after repeated improvement"
+    },
+    {
+      "name": "S2_counter_arc",
+      "entry": "slot grows near, heading error or side-line margin indicates the car must straighten before losing YOLO",
+      "output": "opposite steering arc with shorter distance than S1"
+    },
+    {
+      "name": "S3_straight_finish",
+      "entry": "car is inside corridor, heading is near slot axis, and side margins are not shrinking",
+      "output": "short straight reverse steps; YOLO loss is tolerated for at most 0.5 s"
+    },
+    {
+      "name": "S4_stop",
+      "entry": "vision lost too long, line margin too small, divergence detected, cap reached, or final pose reached",
+      "output": "STOP"
+    }
+  ],
+  "do_not_use_yet": [
+    "unbounded full-run closed loop",
+    "RL-style positive/negative feedback as the only controller",
+    "20-40 cm steps before direction-response calibration"
+  ]
+}

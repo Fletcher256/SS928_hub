@@ -105,4 +105,16 @@ float BMI270_GetTemp(BMI270 *this);
  */
 void BMI270_Get_AngleDt(BMI270 *this, float dt);
 
+/*===========================================================================*/
+/*! @name     Calibration API                                                 */
+/*===========================================================================*/
+
+/*!
+ * @brief  Set vehicle moving state for online bias estimation gating
+ * @param  moving : 0 = stopped (allow EMA bias update), 1 = moving (freeze bias)
+ * @note   Call from app layer based on wheel speed before BMI270_Get_AngleDt().
+ *         Prevents slow-turn gyro signal from being absorbed into bias estimate.
+ */
+void BMI270_SetVehicleMoving(uint8_t moving);
+
 #endif /* BMI270_DRIVER_H_ */

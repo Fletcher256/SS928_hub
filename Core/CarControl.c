@@ -150,9 +150,37 @@ void PrintTelemetry(void)
 	Odometry_t snapshot;
 
 	Odometry_GetSnapshot(&snapshot);
-	USART3_printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\r\n",
-	              MM.GyroX/16.4f, GetReportedYaw(), Angle, aveSpeed, snapshot.x, snapshot.y,
-	              headingPID.Kp, headingPID.Ki, headingPID.Kd);
+
+	/* Read temperature for drift correlation */
+	BMI270_GetTemp(&MM);
+
+	/*
+	 * Telemetry CSV format (15 fields):
+	 *   [0]  GyroX_dps     = MM.GyroX / 16.4  (陀螺X轴 °/s)
+	 *   [1]  Yaw_kal       = Kalman-filtered yaw (deg)
+	 *   [2]  Angle         = servo angle (deg)
+	 *   [3]  Speed         = average motor speed
+	 *   [4]  OdomX         = odometry X (cm)
+	 *   [5]  OdomY         = odometry Y (cm)
+	 *   [6]  Kp            = heading PID Kp
+	 *   [7]  Ki            = heading PID Ki
+	 *   [8]  Kd            = heading PID Kd
+	 *   [9]  GyrX_raw      = MM.GyroX (raw LSB) — for bias analysis
+	 *   [10] GyrY_raw      = MM.GyroY (raw LSB)
+	 *   [11] GyrZ_raw      = MM.GyroZ (raw LSB) — yaw-rate bias source
+	 *   [12] Yaw_cf        = MM.yaw (complementary filter, pre-Kalman)
+	 *   [13] Temp          = MM.temp (Celsius) — for temp-drift correlation
+	 *   [14] Tick          = ControlTicks (ms)
+	 *
+	 * Fields 0-8 remain backward-compatible with existing Python tools.
+	 */
+	USART3_printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,"
+	              "%d,%d,%d,%.3f,%.2f,%lu\r\n",
+	              MM.GyroX / 16.4f, GetReportedYaw(), Angle, aveSpeed,
+	              snapshot.x, snapshot.y,
+	              headingPID.Kp, headingPID.Ki, headingPID.Kd,
+	              (int)MM.GyroX, (int)MM.GyroY, (int)MM.GyroZ,
+	              MM.yaw, MM.temp, (unsigned long)ControlTicks);
 }
 
 void SetStandbyMode(void)

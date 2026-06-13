@@ -1,0 +1,19 @@
+{
+  "schema": "chassis_signs.v1",
+  "verified_date": "2026-06-13",
+  "yaw_cw_positive": true,
+  "odom_d_reverse_negative": false,
+  "odom_x_right_positive": true,
+  "vision_lateral_left_negative": false,
+  "evidence": {
+    "static_yaw_report": "artifacts/autopark_baseline/c0_yaw_static_retest_after_user_update_20260613.json",
+    "motion_sign_report": "artifacts/autopark_baseline/c0_motion_sign_reverse_right_20260613.json",
+    "vision_lateral_sign_report": "artifacts/autopark_baseline/c0_vision_lateral_sign_20260613.json",
+    "reverse_right_arc": {
+      "command": "ARC D=-6.0 STE=120 V=1",
+      "done": "DONE 8521 ARC X=0.7 Y=-4.0 D=4.0 YAW=1.5",
+      "post_stat": "STAT 8523 MODE=IDLE RUN=STANDBY DIR=-1 SPD=0 ANG=90.0 YAW=1.5 X=0.8 Y=-4.4 D=4.5 VEL=0.0 DROP=0 IMU=OK"
+    }
+  },
+  "notes": "C0 signs are populated. Reverse odometry D is positive, reverse velocity is negative, STE=120 reverse arc produced positive X and positive YAW. Operator observed the repeated STE=120 reverse arc as likely clockwise, so yaw_cw_positive=true with preliminary confidence. Source code defines ground +y as left, and historical samples show right image error maps to negative slot_lateral_cm, so vision_lateral_left_negative=false. Current live YOLO returned detection_count=0, so recheck the visual sign physically when YOLO sees the slot again before relying on wide-range autonomous parking."
+}

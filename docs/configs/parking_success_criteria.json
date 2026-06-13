@@ -1,0 +1,23 @@
+{
+  "schema": "parking_success_criteria.v1",
+  "version": "2026-06-12",
+  "done": {
+    "slot_x_err_px_abs_max": 15,
+    "slot_heading_err_deg_abs_max": 4.0,
+    "slot_y_dist_cm_max": 10.0,
+    "min_margin_px_min": 60,
+    "required_stable_frames": 3
+  },
+  "abort": {
+    "min_margin_px_floor": 40,
+    "edge_recovery_enabled": true,
+    "edge_recovery_min_margin_px": 30,
+    "edge_recovery_predicted_min_margin_px": 40,
+    "edge_recovery_min_margin_gain_px": 5,
+    "edge_recovery_require_x_improve": true,
+    "vision_lost_sec": 0.5,
+    "max_total_cm": 60,
+    "max_steps": 12,
+    "divergence_x_err_px": 200
+  }
+}

@@ -68,6 +68,10 @@
 
 #define BMI2_GET_BITS_POS_0(reg_data, bitname)  (reg_data & (bitname##_MASK))
 
+/*! @name SET_BIT_POS0: Set bit at position 0 (no shift, alias for SET_BITS_POS_0) */
+#define BMI2_SET_BIT_POS0(reg_data, bitname, data) \
+    BMI2_SET_BITS_POS_0(reg_data, bitname, data)
+
 /******************************************************************************/
 /*! @name        Return type and error codes                                  */
 /******************************************************************************/
@@ -103,6 +107,44 @@
 #define BMI2_E_ST_NOT_RUNING           INT8_C(-32)
 #define BMI2_E_DATA_RDY_INT_FAILED     INT8_C(-33)
 #define BMI2_E_INVALID_FOC_POSITION    INT8_C(-34)
+
+/*! @name Gyroscope offset compensation registers */
+#define BMI2_GYR_OFF_COMP_3_ADDR      UINT8_C(0x74)
+#define BMI2_GYR_OFF_COMP_6_ADDR      UINT8_C(0x77)
+
+/*! @name Gyroscope offset compensation masks */
+#define BMI2_GYR_OFF_COMP_MSB_X_MASK  UINT8_C(0x03)
+#define BMI2_GYR_OFF_COMP_MSB_Y_MASK  UINT8_C(0x0C)
+#define BMI2_GYR_OFF_COMP_MSB_Z_MASK  UINT8_C(0x30)
+#define BMI2_GYR_OFF_COMP_MSB_X_POS   UINT8_C(0x00)
+#define BMI2_GYR_OFF_COMP_MSB_Y_POS   UINT8_C(0x02)
+#define BMI2_GYR_OFF_COMP_MSB_Z_POS   UINT8_C(0x04)
+#define BMI2_GYR_OFF_COMP_MSB_MASK    UINT16_C(0x0300)
+#define BMI2_GYR_OFF_COMP_LSB_MASK    UINT16_C(0x00FF)
+
+/*! @name Gyroscope offset compensation enable (GYR_OFF_COMP_6 register bit6) */
+#define BMI2_GYR_OFF_COMP_EN_MASK     UINT8_C(0x40)
+#define BMI2_GYR_OFF_COMP_EN_POS      UINT8_C(0x06)
+
+/*! @name Gyroscope gain enable (GYR_OFF_COMP_6 register bit7) */
+#define BMI2_GYR_GAIN_EN_MASK         UINT8_C(0x80)
+#define BMI2_GYR_GAIN_EN_POS          UINT8_C(0x07)
+
+/*! @name Gyro FOC configuration value (25Hz, CIC mode, continuous) */
+#define BMI2_FOC_GYR_CONF_VAL         UINT8_C(0xB6)
+
+/*! @name Gyro FOC reference limits (LSB at ±2000dps) */
+#define BMI2_GYRO_FOC_2000_DPS_REF    UINT16_C(16)
+#define BMI2_GYRO_FOC_1000_DPS_REF    UINT16_C(33)
+#define BMI2_GYRO_FOC_500_DPS_REF     UINT16_C(66)
+#define BMI2_GYRO_FOC_250_DPS_REF     UINT16_C(131)
+#define BMI2_GYRO_FOC_125_DPS_REF     UINT16_C(262)
+
+/*! @name FOC sample limit */
+#define BMI2_FOC_SAMPLE_LIMIT         UINT8_C(128)
+
+/*! @name Gyro data byte count */
+#define BMI2_GYR_NUM_BYTES            UINT8_C(6)
 
 /******************************************************************************/
 /*! @name        Register Map                                                 */

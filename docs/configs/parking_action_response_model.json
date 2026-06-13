@@ -1,0 +1,546 @@
+{
+  "schema": "parking_action_response_model.v2",
+  "version": "2026-06-13-c2-steering",
+  "noise_3sigma": {
+    "slot_x_err_px": 3.0,
+    "slot_heading_err_deg": 0.6,
+    "slot_lateral_cm": 0.2,
+    "min_margin_px": 2.0
+  },
+  "records": [
+    {
+      "action_id": "reverse_left_hard_6",
+      "command": "ARC D=-6.0 STE=60 V=1",
+      "bucket": {
+        "phase": "align_in_corridor",
+        "x_err_sign": "-",
+        "x_err_bin": "40-120",
+        "heading_bin": "0-8"
+      },
+      "samples": [
+        {
+          "sample_id": "artifacts/autopark_baseline/parking_arc_calib_ste60_combined_20260613.jsonl:3",
+          "date": "2026-06-13",
+          "log": "artifacts/autopark_baseline/parking_arc_calib_ste60_combined_20260613.jsonl",
+          "motion_lineno": 3,
+          "action_id": "reverse_left_hard_6",
+          "command": "ARC D=-6.0 STE=60 V=1",
+          "bucket": {
+            "phase": "align_in_corridor",
+            "x_err_sign": "-",
+            "x_err_bin": "40-120",
+            "heading_bin": "0-8"
+          },
+          "pre": {
+            "count": 1,
+            "linenos": [
+              2
+            ],
+            "phase_hint": "align_in_corridor",
+            "stable_rows": 1,
+            "slot_y_dist_cm": 32.451,
+            "slot_x_err_px": -51.9,
+            "slot_entry_x_err_px": -51.21,
+            "slot_lateral_cm": 4.401,
+            "slot_heading_err_deg": 0.979,
+            "min_margin_px": 210.51,
+            "left_margin_px": 314.31,
+            "right_margin_px": 210.51,
+            "confidence": 0.94,
+            "pose_quality": 0.977
+          },
+          "post": {
+            "count": 3,
+            "linenos": [
+              6,
+              7,
+              8
+            ],
+            "phase_hint": "straighten_or_enter",
+            "stable_rows": 3,
+            "slot_y_dist_cm": 28.006,
+            "slot_x_err_px": -10.0,
+            "slot_entry_x_err_px": -10.0,
+            "slot_lateral_cm": 1.737,
+            "slot_heading_err_deg": 0.0,
+            "min_margin_px": 210.0,
+            "left_margin_px": 230.0,
+            "right_margin_px": 210.0,
+            "confidence": 0.895,
+            "pose_quality": 0.968
+          },
+          "delta": {
+            "slot_y_dist_cm": -4.445,
+            "slot_x_err_px": 41.9,
+            "slot_entry_x_err_px": 41.21,
+            "slot_lateral_cm": -2.664,
+            "slot_heading_err_deg": -0.979,
+            "min_margin_px": -0.51,
+            "left_margin_px": -84.31,
+            "right_margin_px": -0.51
+          },
+          "verdict": "improved",
+          "verdict_flags": {
+            "x_abs_delta": -41.9,
+            "lat_abs_delta": -2.664,
+            "heading_abs_delta": -0.979,
+            "margin_delta": -0.51,
+            "x_improved": true,
+            "x_worsened": false,
+            "lat_improved": true,
+            "lat_worsened": false,
+            "heading_improved": true,
+            "heading_worsened": false,
+            "margin_improved": false,
+            "margin_worsened": false
+          },
+          "stm32": {
+            "pre_servo_response": "",
+            "pwm_after_pre_servo": "",
+            "motion_response": "ACK 1005 ARC\r\nTLM 21 YAW=-14.8 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=60.0 IMU=OK\r\nTLM 22 YAW=-14.8 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=60.0 IMU=OK\r\nTLM 23 YAW=-14.8 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=60.0 IMU=OK\r\nTLM 24 YAW=-14.8 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=60.0 IMU=OK\r\nTLM 25 YAW=-14.8 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=60.0 IMU=OK\r\nTLM 26 YAW=-14.8 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=60.0 IMU=OK\r\nTLM 27 YAW=-15.0 X=-0.0 Y=-0.1 D=0.1 V=-1.5 ANG=60.0 IMU=OK\r\nTLM 28 YAW=-15.0 X=-0.0 Y=-0.2 D=0.2 V=0.0 ANG=60.0 IMU=OK\r\nTLM 29 YAW=-15.1 X=-0.0 Y=-0.2 D=0.2 V=-0.4 ANG=60.0 IMU=OK\r\nTLM 30 YAW=-16.0 X=-0.0 Y=-1.2 D=1.2 V=-8.9 ANG=60.0 IMU=OK\r\nTLM 31 YAW=-17.9 X=-0.2 Y=-3.9 D=3.9 V=-15.2 ANG=60.0 IMU=OK\r\nDONE 1005 ARC X=-0.3 Y=-4.2 D=4.2 YAW=-18.0",
+            "stat_after": "STAT 1008 MODE=IDLE RUN=STANDBY DIR=-1 SPD=0 ANG=90.0 YAW=-19.4 X=-0.5 Y=-6.5 D=6.5 VEL=0.0 DROP=0 IMU=OK"
+          }
+        }
+      ],
+      "mean_delta": {
+        "slot_y_dist_cm": -4.445,
+        "slot_x_err_px": 41.9,
+        "slot_entry_x_err_px": 41.21,
+        "slot_lateral_cm": -2.664,
+        "slot_heading_err_deg": -0.979,
+        "min_margin_px": -0.51,
+        "left_margin_px": -84.31,
+        "right_margin_px": -0.51
+      },
+      "n": 1,
+      "confidence": 0.333,
+      "verdict_counts": {
+        "improved": 1
+      },
+      "dominant_verdict": "improved"
+    },
+    {
+      "action_id": "reverse_left_hard_6",
+      "command": "ARC D=-6.0 STE=60 V=1",
+      "bucket": {
+        "phase": "approach_entry",
+        "x_err_sign": "+",
+        "x_err_bin": "0-40",
+        "heading_bin": "0-8"
+      },
+      "samples": [
+        {
+          "sample_id": "artifacts/autopark_baseline/parking_probe_left_20260612.jsonl:4",
+          "date": "2026-06-12",
+          "log": "artifacts/autopark_baseline/parking_probe_left_20260612.jsonl",
+          "motion_lineno": 4,
+          "action_id": "reverse_left_hard_6",
+          "command": "ARC D=-6.0 STE=60 V=1",
+          "bucket": {
+            "phase": "approach_entry",
+            "x_err_sign": "+",
+            "x_err_bin": "0-40",
+            "heading_bin": "0-8"
+          },
+          "pre": {
+            "count": 1,
+            "linenos": [
+              3
+            ],
+            "phase_hint": "approach_entry",
+            "stable_rows": 1,
+            "slot_y_dist_cm": 34.108,
+            "slot_x_err_px": 18.0,
+            "slot_entry_x_err_px": 18.0,
+            "slot_lateral_cm": 0.029,
+            "slot_heading_err_deg": 0.0,
+            "min_margin_px": 186.0,
+            "left_margin_px": 186.0,
+            "right_margin_px": 222.0,
+            "confidence": 0.823,
+            "pose_quality": 0.947
+          },
+          "post": {
+            "count": 1,
+            "linenos": [
+              7
+            ],
+            "phase_hint": "align_in_corridor",
+            "stable_rows": 1,
+            "slot_y_dist_cm": 31.515,
+            "slot_x_err_px": 46.0,
+            "slot_entry_x_err_px": 46.0,
+            "slot_lateral_cm": -1.684,
+            "slot_heading_err_deg": 0.0,
+            "min_margin_px": 162.0,
+            "left_margin_px": 162.0,
+            "right_margin_px": 254.0,
+            "confidence": 0.726,
+            "pose_quality": 0.918
+          },
+          "delta": {
+            "slot_y_dist_cm": -2.593,
+            "slot_x_err_px": 28.0,
+            "slot_entry_x_err_px": 28.0,
+            "slot_lateral_cm": -1.713,
+            "slot_heading_err_deg": 0.0,
+            "min_margin_px": -24.0,
+            "left_margin_px": -24.0,
+            "right_margin_px": 32.0
+          },
+          "verdict": "worsened",
+          "verdict_flags": {
+            "x_abs_delta": 28.0,
+            "lat_abs_delta": 1.655,
+            "heading_abs_delta": 0.0,
+            "margin_delta": -24.0,
+            "x_improved": false,
+            "x_worsened": true,
+            "lat_improved": false,
+            "lat_worsened": true,
+            "heading_improved": false,
+            "heading_worsened": false,
+            "margin_improved": false,
+            "margin_worsened": true
+          },
+          "stm32": {
+            "pre_servo_response": "DONE 1004 SERVO",
+            "pwm_after_pre_servo": "PWM 1005 HEALTH=1 EN=1 ANG=60.0 PULSE=1333 PSC=71 ARR=19999 CCR2=1333 CCER=0x0010 RECOV=0",
+            "motion_response": "ACK 1006 ARC\r\nDONE 1006 ARC",
+            "stat_after": "STAT 1008 MODE=IDLE RUN=STANDBY DIR=-1 SPD=0 ANG=90.0 YAW=31.3 X=-0.1 Y=-4.5 D=4.5 VEL=0.0 DROP=0"
+          }
+        }
+      ],
+      "mean_delta": {
+        "slot_y_dist_cm": -2.593,
+        "slot_x_err_px": 28.0,
+        "slot_entry_x_err_px": 28.0,
+        "slot_lateral_cm": -1.713,
+        "slot_heading_err_deg": 0.0,
+        "min_margin_px": -24.0,
+        "left_margin_px": -24.0,
+        "right_margin_px": 32.0
+      },
+      "n": 1,
+      "confidence": 0.333,
+      "verdict_counts": {
+        "worsened": 1
+      },
+      "dominant_verdict": "worsened"
+    },
+    {
+      "action_id": "reverse_left_soft_6",
+      "command": "ARC D=-6.0 STE=75 V=1",
+      "bucket": {
+        "phase": "align_in_corridor",
+        "x_err_sign": "-",
+        "x_err_bin": "0-40",
+        "heading_bin": "0-8"
+      },
+      "samples": [
+        {
+          "sample_id": "artifacts/autopark_baseline/parking_arc_calib_ste75_combined_20260613.jsonl:3",
+          "date": "2026-06-13",
+          "log": "artifacts/autopark_baseline/parking_arc_calib_ste75_combined_20260613.jsonl",
+          "motion_lineno": 3,
+          "action_id": "reverse_left_soft_6",
+          "command": "ARC D=-6.0 STE=75 V=1",
+          "bucket": {
+            "phase": "align_in_corridor",
+            "x_err_sign": "-",
+            "x_err_bin": "0-40",
+            "heading_bin": "0-8"
+          },
+          "pre": {
+            "count": 1,
+            "linenos": [
+              2
+            ],
+            "phase_hint": "align_in_corridor",
+            "stable_rows": 1,
+            "slot_y_dist_cm": 34.886,
+            "slot_x_err_px": -30.52,
+            "slot_entry_x_err_px": -29.14,
+            "slot_lateral_cm": 3.218,
+            "slot_heading_err_deg": 1.975,
+            "min_margin_px": 237.31,
+            "left_margin_px": 298.34,
+            "right_margin_px": 237.31,
+            "confidence": 0.898,
+            "pose_quality": 0.961
+          },
+          "post": {
+            "count": 3,
+            "linenos": [
+              6,
+              7,
+              8
+            ],
+            "phase_hint": "align_in_corridor",
+            "stable_rows": 3,
+            "slot_y_dist_cm": 32.541,
+            "slot_x_err_px": -50.22,
+            "slot_entry_x_err_px": -49.203,
+            "slot_lateral_cm": 4.356,
+            "slot_heading_err_deg": 1.461,
+            "min_margin_px": 210.937,
+            "left_margin_px": 311.38,
+            "right_margin_px": 210.937,
+            "confidence": 0.941,
+            "pose_quality": 0.976
+          },
+          "delta": {
+            "slot_y_dist_cm": -2.345,
+            "slot_x_err_px": -19.7,
+            "slot_entry_x_err_px": -20.063,
+            "slot_lateral_cm": 1.138,
+            "slot_heading_err_deg": -0.514,
+            "min_margin_px": -26.373,
+            "left_margin_px": 13.04,
+            "right_margin_px": -26.373
+          },
+          "verdict": "worsened",
+          "verdict_flags": {
+            "x_abs_delta": 19.7,
+            "lat_abs_delta": 1.138,
+            "heading_abs_delta": -0.514,
+            "margin_delta": -26.373,
+            "x_improved": false,
+            "x_worsened": true,
+            "lat_improved": false,
+            "lat_worsened": true,
+            "heading_improved": false,
+            "heading_worsened": false,
+            "margin_improved": false,
+            "margin_worsened": true
+          },
+          "stm32": {
+            "pre_servo_response": "",
+            "pwm_after_pre_servo": "",
+            "motion_response": "ACK 1005 ARC\r\nTLM 10 YAW=-10.0 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=75.0 IMU=OK\r\nTLM 11 YAW=-10.0 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=75.0 IMU=OK\r\nTLM 12 YAW=-10.0 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=75.0 IMU=OK\r\nTLM 13 YAW=-10.0 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=75.0 IMU=OK\r\nTLM 14 YAW=-10.0 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=75.0 IMU=OK\r\nTLM 15 YAW=-10.0 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=75.0 IMU=OK\r\nTLM 16 YAW=-10.0 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=75.0 IMU=OK\r\nTLM 17 YAW=-10.1 X=-0.0 Y=-0.1 D=0.1 V=-1.3 ANG=75.0 IMU=OK\r\nTLM 18 YAW=-10.1 X=-0.0 Y=-0.1 D=0.2 V=0.0 ANG=75.0 IMU=OK\r\nTLM 19 YAW=-10.2 X=0.0 Y=-0.6 D=0.6 V=-4.4 ANG=75.0 IMU=OK\r\nTLM 20 YAW=-10.8 X=-0.0 Y=-2.3 D=2.3 V=-12.2 ANG=75.0 IMU=OK\r\nDONE 1005 ARC X=-0.1 Y=-4.2 D=4.2 YAW=-11.5",
+            "stat_after": "STAT 1008 MODE=IDLE RUN=STANDBY DIR=-1 SPD=0 ANG=90.0 YAW=-12.2 X=-0.1 Y=-5.9 D=5.9 VEL=0.0 DROP=0 IMU=OK"
+          }
+        }
+      ],
+      "mean_delta": {
+        "slot_y_dist_cm": -2.345,
+        "slot_x_err_px": -19.7,
+        "slot_entry_x_err_px": -20.063,
+        "slot_lateral_cm": 1.138,
+        "slot_heading_err_deg": -0.514,
+        "min_margin_px": -26.373,
+        "left_margin_px": 13.04,
+        "right_margin_px": -26.373
+      },
+      "n": 1,
+      "confidence": 0.333,
+      "verdict_counts": {
+        "worsened": 1
+      },
+      "dominant_verdict": "worsened"
+    },
+    {
+      "action_id": "reverse_right_soft_6",
+      "command": "ARC D=-6.0 STE=105 V=1",
+      "bucket": {
+        "phase": "straighten_or_enter",
+        "x_err_sign": "+",
+        "x_err_bin": "0-40",
+        "heading_bin": "-8-0"
+      },
+      "samples": [
+        {
+          "sample_id": "artifacts/autopark_baseline/parking_arc_calib_ste105_combined_20260613.jsonl:4",
+          "date": "2026-06-13",
+          "log": "artifacts/autopark_baseline/parking_arc_calib_ste105_combined_20260613.jsonl",
+          "motion_lineno": 4,
+          "action_id": "reverse_right_soft_6",
+          "command": "ARC D=-6.0 STE=105 V=1",
+          "bucket": {
+            "phase": "straighten_or_enter",
+            "x_err_sign": "+",
+            "x_err_bin": "0-40",
+            "heading_bin": "-8-0"
+          },
+          "pre": {
+            "count": 1,
+            "linenos": [
+              3
+            ],
+            "phase_hint": "straighten_or_enter",
+            "stable_rows": 1,
+            "slot_y_dist_cm": 37.122,
+            "slot_x_err_px": 7.84,
+            "slot_entry_x_err_px": 6.79,
+            "slot_lateral_cm": 0.473,
+            "slot_heading_err_deg": -1.507,
+            "min_margin_px": 242.58,
+            "left_margin_px": 242.58,
+            "right_margin_px": 258.26,
+            "confidence": 0.799,
+            "pose_quality": 0.933
+          },
+          "post": {
+            "count": 3,
+            "linenos": [
+              7,
+              8,
+              9
+            ],
+            "phase_hint": "align_in_corridor",
+            "stable_rows": 3,
+            "slot_y_dist_cm": 34.881,
+            "slot_x_err_px": -29.023,
+            "slot_entry_x_err_px": -27.633,
+            "slot_lateral_cm": 3.129,
+            "slot_heading_err_deg": 1.987,
+            "min_margin_px": 238.653,
+            "left_margin_px": 296.693,
+            "right_margin_px": 238.653,
+            "confidence": 0.886,
+            "pose_quality": 0.957
+          },
+          "delta": {
+            "slot_y_dist_cm": -2.241,
+            "slot_x_err_px": -36.863,
+            "slot_entry_x_err_px": -34.423,
+            "slot_lateral_cm": 2.656,
+            "slot_heading_err_deg": 3.494,
+            "min_margin_px": -3.927,
+            "left_margin_px": 54.113,
+            "right_margin_px": -19.607
+          },
+          "verdict": "worsened",
+          "verdict_flags": {
+            "x_abs_delta": 21.183,
+            "lat_abs_delta": 2.656,
+            "heading_abs_delta": 0.48,
+            "margin_delta": -3.927,
+            "x_improved": false,
+            "x_worsened": true,
+            "lat_improved": false,
+            "lat_worsened": true,
+            "heading_improved": false,
+            "heading_worsened": false,
+            "margin_improved": false,
+            "margin_worsened": true
+          },
+          "stm32": {
+            "pre_servo_response": "",
+            "pwm_after_pre_servo": "",
+            "motion_response": "ACK 1005 ARC\r\nTLM 0 YAW=-6.5 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=105.0 IMU=OK\r\nTLM 1 YAW=-6.5 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=105.0 IMU=OK\r\nTLM 2 YAW=-6.5 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=105.0 IMU=OK\r\nTLM 3 YAW=-6.5 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=105.0 IMU=OK\r\nTLM 4 YAW=-6.5 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=105.0 IMU=OK\r\nTLM 5 YAW=-6.5 X=0.0 Y=0.0 D=0.0 V=0.0 ANG=105.0 IMU=OK\r\nTLM 6 YAW=-6.5 X=0.0 Y=-0.1 D=0.1 V=-2.5 ANG=105.0 IMU=OK\r\nTLM 7 YAW=-6.4 X=0.0 Y=-0.2 D=0.2 V=0.0 ANG=105.0 IMU=OK\r\nTLM 8 YAW=-6.4 X=0.0 Y=-0.3 D=0.3 V=-0.2 ANG=105.0 IMU=OK\r\nTLM 9 YAW=-6.0 X=0.0 Y=-1.6 D=1.6 V=-10.5 ANG=105.0 IMU=OK\r\nDONE 1005 ARC X=0.1 Y=-4.1 D=4.1 YAW=-5.5",
+            "stat_after": "STAT 1008 MODE=IDLE RUN=STANDBY DIR=-1 SPD=0 ANG=90.0 YAW=-5.0 X=0.2 Y=-6.7 D=6.8 VEL=0.0 DROP=0 IMU=OK"
+          }
+        }
+      ],
+      "mean_delta": {
+        "slot_y_dist_cm": -2.241,
+        "slot_x_err_px": -36.863,
+        "slot_entry_x_err_px": -34.423,
+        "slot_lateral_cm": 2.656,
+        "slot_heading_err_deg": 3.494,
+        "min_margin_px": -3.927,
+        "left_margin_px": 54.113,
+        "right_margin_px": -19.607
+      },
+      "n": 1,
+      "confidence": 0.333,
+      "verdict_counts": {
+        "worsened": 1
+      },
+      "dominant_verdict": "worsened"
+    }
+  ],
+  "legacy_records": [
+    {
+      "action_id": "reverse_left_hard_6",
+      "command": "ARC D=-6.0 STE=60 V=1",
+      "source": "artifacts/autopark_baseline/parking_probe_left_20260612.jsonl",
+      "sample_count": 1,
+      "confidence": 0.9,
+      "context": {
+        "phase_hint": "approach_entry",
+        "before_slot_x_err_px": 18.0,
+        "before_slot_lateral_cm": -0.01,
+        "before_min_margin_px": 186.0
+      },
+      "delta": {
+        "slot_y_dist_cm": -2.41,
+        "slot_x_err_px": 28.0,
+        "slot_lateral_cm": -1.67,
+        "slot_heading_err_deg": -0.05,
+        "min_margin_px": -24.0
+      },
+      "verdict": "worsened",
+      "notes": "Do not promote this direction from the measured pose."
+    }
+  ],
+  "updated_from": [
+    {
+      "sample_id": "artifacts/autopark_baseline/parking_arc_calib_ste105_combined_20260613.jsonl:4",
+      "action_id": "reverse_right_soft_6",
+      "command": "ARC D=-6.0 STE=105 V=1",
+      "bucket": {
+        "phase": "straighten_or_enter",
+        "x_err_sign": "+",
+        "x_err_bin": "0-40",
+        "heading_bin": "-8-0"
+      },
+      "delta": {
+        "slot_y_dist_cm": -2.241,
+        "slot_x_err_px": -36.863,
+        "slot_entry_x_err_px": -34.423,
+        "slot_lateral_cm": 2.656,
+        "slot_heading_err_deg": 3.494,
+        "min_margin_px": -3.927,
+        "left_margin_px": 54.113,
+        "right_margin_px": -19.607
+      },
+      "verdict": "worsened"
+    },
+    {
+      "sample_id": "artifacts/autopark_baseline/parking_arc_calib_ste75_combined_20260613.jsonl:3",
+      "action_id": "reverse_left_soft_6",
+      "command": "ARC D=-6.0 STE=75 V=1",
+      "bucket": {
+        "phase": "align_in_corridor",
+        "x_err_sign": "-",
+        "x_err_bin": "0-40",
+        "heading_bin": "0-8"
+      },
+      "delta": {
+        "slot_y_dist_cm": -2.345,
+        "slot_x_err_px": -19.7,
+        "slot_entry_x_err_px": -20.063,
+        "slot_lateral_cm": 1.138,
+        "slot_heading_err_deg": -0.514,
+        "min_margin_px": -26.373,
+        "left_margin_px": 13.04,
+        "right_margin_px": -26.373
+      },
+      "verdict": "worsened"
+    },
+    {
+      "sample_id": "artifacts/autopark_baseline/parking_arc_calib_ste60_combined_20260613.jsonl:3",
+      "action_id": "reverse_left_hard_6",
+      "command": "ARC D=-6.0 STE=60 V=1",
+      "bucket": {
+        "phase": "align_in_corridor",
+        "x_err_sign": "-",
+        "x_err_bin": "40-120",
+        "heading_bin": "0-8"
+      },
+      "delta": {
+        "slot_y_dist_cm": -4.445,
+        "slot_x_err_px": 41.9,
+        "slot_entry_x_err_px": 41.21,
+        "slot_lateral_cm": -2.664,
+        "slot_heading_err_deg": -0.979,
+        "min_margin_px": -0.51,
+        "left_margin_px": -84.31,
+        "right_margin_px": -0.51
+      },
+      "verdict": "improved"
+    }
+  ]
+}

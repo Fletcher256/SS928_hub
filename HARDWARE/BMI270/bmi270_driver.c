@@ -116,15 +116,6 @@ static void bmi2_delay_us_cb(uint32_t period, void *intf_ptr)
 /*===========================================================================*/
 
 /*!
- * @brief Read BMI270 status register (0x03)
- * @return Status byte (bit7=DRDY_ACC, bit6=DRDY_GYR, ...)
- */
-static uint8_t bmi2_read_status(void)
-{
-    return (uint8_t)(BMI270_READ_REG(BMI2_STATUS_ADDR) & 0xFF);
-}
-
-/*!
  * @brief Soft-reset the BMI270
  */
 static int8_t bmi2_soft_reset(void)
@@ -339,6 +330,47 @@ static int16_t gyro_zero_x = 0;
 static int16_t gyro_zero_y = 0;
 static int16_t gyro_zero_z = 0;
 
+/*===========================================================================*/
+/*! @name     Online Gyro Bias Estimation (方案B)                              */
+/*!                                                                           */
+/*! Problem:  MEMS gyro bias random-walks over time (Bias Instability).       */
+/*!           Static calibration at t=0 cannot compensate t>0 drift.          */
+/*!                                                                           */
+/*! Solution: When device is stationary, gyro output = bias + noise.          */
+/*!           Estimate bias continuously via EMA in the rate domain,          */
+/*!           then correct the yaw integration BEFORE accumulation.           */
+/*!                                                                           */
+/*! Architecture:                                                             */
+/*!   raw → SW_offset_sub → PT1_filter → Gz_rate → bias_correct → yaw_inc    */
+/*!                                          ↓                                */
+/*!                                     [stationary?]─yes→ EMA(bias)          */
+/*===========================================================================*/
+
+/* ── Bias estimate state ── */
+static float    gyro_bias_z  = 0.0f;    /*!< EMA bias estimate for Z-axis (rad/s) */
+
+/* ── Tunable parameters ── */
+static float    gyro_bias_alpha = 0.001f; /*!< EMA coeff: τ=1/(α*f)=1/(0.001*200)=5s */
+
+/* ── Stationary detector state ── */
+static uint16_t stationary_cnt = 0;      /*!< Consecutive stationary frames */
+static uint8_t  bmi270_vehicle_moving = 1; /*!< Speed gate: 1=moving, 0=stopped (default safe) */
+
+#define STATIONARY_CONFIRM_CNT   100U     /*!< Confirm stationary after 0.5s (100*5ms) */
+#define STATIONARY_GYRO_THRESH   3.0f     /*!< Total gyro mag below this → stationary (°/s) */
+
+/*!
+ * @brief Set vehicle moving state (called from app layer based on wheel speed)
+ * @param moving : 0 = stopped (allow bias update), 1 = moving (freeze bias)
+ * @note  Speed-gate prevents EMA from absorbing slow turns into bias estimate.
+ *        When the vehicle is moving, even slow gyro signals are real rotation,
+ *        not bias drift. Default: moving=1 (bias frozen) for safety.
+ */
+void BMI270_SetVehicleMoving(uint8_t moving)
+{
+    bmi270_vehicle_moving = moving;
+}
+
 #if BMI270_USE_Filter
 PT1Filter_t pt1_filter_x, pt1_filter_y, pt1_filter_z;
 PT1Filter_t pt1_filter_gx, pt1_filter_gy, pt1_filter_gz;
@@ -346,17 +378,24 @@ PT1Filter_t pt1_filter_gx, pt1_filter_gy, pt1_filter_gz;
 
 /*!
  * @brief Software gyro zero-offset calibration
- * @param calibration_samples : Number of samples to average (typical: 200)
+ * @param calibration_samples : Number of samples to average (typical: 1000)
  * @return 0 on success, -1 on failure
+ *
+ * Two-phase calibration:
+ *   Phase 1 — Accumulate N samples to compute static bias (gyro_zero_x/y/z)
+ *   Phase 2 — Verify with N/5 samples (calibration applied); fail if ANY
+ *             axis residual mean >= 2 LSB (= 0.122 °/s at ±2000 dps)
  */
 static int8_t BMI270_SoftCalibrate_Z(uint16_t calibration_samples)
 {
     int32_t gx_sum = 0, gy_sum = 0, gz_sum = 0;
     int16_t GyroX, GyroY, GyroZ;
+    int16_t cand_zero_x, cand_zero_y, cand_zero_z;
     uint8_t  temp_buffer[6];
     uint16_t i;
+    uint16_t verify_samples;
 
-    /* Accumulate samples */
+    /* ── Phase 1: Accumulate calibration samples ── */
     for (i = 0; i < calibration_samples; i++) {
         if (BMI270_READ_REG_CONTINUE_STATUS(BMI2_GYR_X_LSB_ADDR, 6, temp_buffer) != 0) {
             return -1;
@@ -370,28 +409,46 @@ static int8_t BMI270_SoftCalibrate_Z(uint16_t calibration_samples)
         gz_sum += GyroZ;
         BMI270_DELAY_MS((uint32_t)(bmi270_dt * 1000.0f));
     }
-    gyro_zero_x = (int16_t)(gx_sum / calibration_samples);
-    gyro_zero_y = (int16_t)(gy_sum / calibration_samples);
-    gyro_zero_z = (int16_t)(gz_sum / calibration_samples);
 
-    /* Verify calibration quality */
-    gz_sum = gy_sum = gx_sum = 0;
-    for (i = 0; i < 100; i++) {
+    /* Compute candidate offsets — do NOT apply yet */
+    cand_zero_x = (int16_t)(gx_sum / (int32_t)calibration_samples);
+    cand_zero_y = (int16_t)(gy_sum / (int32_t)calibration_samples);
+    cand_zero_z = (int16_t)(gz_sum / (int32_t)calibration_samples);
+
+    /* ── Phase 2: Verify with candidate offsets (fresh accumulation) ── */
+    verify_samples = calibration_samples / 5;
+    if (verify_samples < 50) verify_samples = 50;
+    if (verify_samples > 200) verify_samples = 200;
+
+    gx_sum = 0;
+    gy_sum = 0;
+    gz_sum = 0;
+
+    for (i = 0; i < verify_samples; i++) {
         if (BMI270_READ_REG_CONTINUE_STATUS(BMI2_GYR_X_LSB_ADDR, 6, temp_buffer) != 0) {
             return -1;
         }
-        GyroX = ((int16_t)(temp_buffer[1] << 8) | temp_buffer[0]) - gyro_zero_x;
-        GyroY = ((int16_t)(temp_buffer[3] << 8) | temp_buffer[2]) - gyro_zero_y;
-        GyroZ = ((int16_t)(temp_buffer[5] << 8) | temp_buffer[4]) - gyro_zero_z;
+        GyroX = ((int16_t)(temp_buffer[1] << 8) | temp_buffer[0]) - cand_zero_x;
+        GyroY = ((int16_t)(temp_buffer[3] << 8) | temp_buffer[2]) - cand_zero_y;
+        GyroZ = ((int16_t)(temp_buffer[5] << 8) | temp_buffer[4]) - cand_zero_z;
 
         gx_sum += GyroX;
         gy_sum += GyroY;
         gz_sum += GyroZ;
         BMI270_DELAY_MS((uint32_t)(bmi270_dt * 1000.0f));
     }
-    if (abs(gx_sum / 100) >= 2 && abs(gy_sum / 100) >= 2 && abs(gz_sum / 100) >= 2) {
-        return -1;
+
+    /* Fail if ANY axis residual mean >= 2 LSB */
+    if (abs((int)(gx_sum / (int32_t)verify_samples)) >= 2 ||
+        abs((int)(gy_sum / (int32_t)verify_samples)) >= 2 ||
+        abs((int)(gz_sum / (int32_t)verify_samples)) >= 2) {
+        return -1;  /* gyro_zero untouched — caller will retry */
     }
+
+    /* Only commit AFTER verification passes */
+    gyro_zero_x = cand_zero_x;
+    gyro_zero_y = cand_zero_y;
+    gyro_zero_z = cand_zero_z;
     return 0;
 }
 
@@ -567,22 +624,43 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
     /* Sample rate = 200Hz → dt = 5ms */
     bmi270_dt = 0.005f;
 
-    /* 8. Wait for sensor stabilization */
-    BMI270_DELAY_MS(100);
+    /* 8. Wait for sensor stabilization (MEMS settling + filter warm-up) */
+    BMI270_DELAY_MS(500);
 
-    /* === DIAGNOSTIC STEP 3: Gyro calibration === */
-    for (i = 0; i < 3; i++) {
-        if (BMI270_SoftCalibrate_Z(200) == 0) {
-            break;
+    /* === STEP 9: Disable HW FOC + Gyro calibration ===
+     *
+     * 9a. Explicitly disable BMI270 on-chip offset compensation.
+     *     Soft-reset sets reg 0x77 to 0x00, but config blob may touch it.
+     *     Write 0x00 to GYR_OFF_COMP_6 (0x77) for defense-in-depth.
+     */
+    {
+        uint8_t foc_reg;
+        BMI270_WRITE_REG(BMI2_GYR_OFF_COMP_6_ADDR, 0x00);
+        foc_reg = (uint8_t)(BMI270_READ_REG(BMI2_GYR_OFF_COMP_6_ADDR) & 0xFF);
+        USART3_printf("[BMI270] FOC disabled (reg 0x77=0x%02X)\r\n", foc_reg);
+    }
+
+    /* 9b. Software static calibration (200 samples ≈ 1s) */
+    {
+        for (i = 0; i < 3; i++) {
+            if (BMI270_SoftCalibrate_Z(200) == 0) {
+                break;
+            }
         }
+        if (i < 3) {
+            USART3_printf("[BMI270] SW Gyro cal OK (attempt %d)\r\n", i + 1);
+        } else {
+            USART3_printf("[BMI270] WARN: SW gyro cal failed, using raw offsets\r\n");
+        }
+        USART3_printf("[BMI270] SW Gyro offsets: X=%d Y=%d Z=%d\r\n",
+                      (int)gyro_zero_x, (int)gyro_zero_y, (int)gyro_zero_z);
     }
-    if (i < 3) {
-        USART3_printf("[BMI270] Gyro cal OK (attempt %d)\r\n", i + 1);
-    } else {
-        USART3_printf("[BMI270] WARN: gyro cal failed, using raw offsets\r\n");
-    }
-    USART3_printf("[BMI270] Gyro offsets: X=%d Y=%d Z=%d\r\n",
-                  (int)gyro_zero_x, (int)gyro_zero_y, (int)gyro_zero_z);
+
+    /* 9c. Seed online bias estimator at zero.
+     *     SW static offset already removes the constant component from raw data.
+     *     EMA starts at 0 and converges upward to the residual time-varying bias. */
+    gyro_bias_z = 0.0f;
+    USART3_printf("[BMI270] Bias seed: Z=0.0 (SW offset handles static component)\r\n");
 
     /* 10. Initialize filters */
 #if BMI270_USE_Filter
@@ -671,9 +749,44 @@ void BMI270_Get_AngleDt(BMI270 *this, float dt)
     Ax = (float)this->AccX * bmi270_accel_scale;
     Ay = (float)this->AccY * bmi270_accel_scale;
     Az = (float)this->AccZ * bmi270_accel_scale;
-    Gx = (float)this->GyroX * bmi270_gyro_scale * dt;
-    Gy = (float)this->GyroY * bmi270_gyro_scale * dt;
-    Gz = (float)this->GyroZ * bmi270_gyro_scale * dt;
+
+    /* Gyro rates (rad/s) — for stationary detection + bias estimation */
+    float Gx_rate = (float)this->GyroX * bmi270_gyro_scale;
+    float Gy_rate = (float)this->GyroY * bmi270_gyro_scale;
+    float Gz_rate = (float)this->GyroZ * bmi270_gyro_scale;
+
+    /* ── Online Bias Estimation (方案B) ──
+     * Stationary → gyro reads only bias+noise → EMA-update bias estimate.
+     * Moving     → hold bias, apply correction to prevent integration drift.
+     */
+    {
+        float gx_abs = (Gx_rate >= 0.0f) ? Gx_rate : -Gx_rate;
+        float gy_abs = (Gy_rate >= 0.0f) ? Gy_rate : -Gy_rate;
+        float gz_abs = (Gz_rate >= 0.0f) ? Gz_rate : -Gz_rate;
+        float gyro_mag_dps = (gx_abs + gy_abs + gz_abs) * 57.2958f;
+
+        if (gyro_mag_dps < STATIONARY_GYRO_THRESH) {
+            if (stationary_cnt < STATIONARY_CONFIRM_CNT) {
+                stationary_cnt++;
+            }
+        } else {
+            stationary_cnt = 0;
+        }
+
+        /* Update bias only when BOTH gyro-quiet AND vehicle-stopped.
+         * Speed gate prevents slow-turn signal from being absorbed as bias. */
+        if (stationary_cnt >= STATIONARY_CONFIRM_CNT && !bmi270_vehicle_moving) {
+            /* EMA update: bias ← α·obs + (1-α)·bias,  τ ≈ 1/(α·f) = 5s */
+            gyro_bias_z = gyro_bias_alpha * Gz_rate
+                        + (1.0f - gyro_bias_alpha) * gyro_bias_z;
+        }
+        /* else: bias frozen at last estimate */
+    }
+
+    /* Angular increments (rad) — bias-corrected for yaw */
+    Gx = Gx_rate * dt;
+    Gy = Gy_rate * dt;
+    Gz = (Gz_rate - gyro_bias_z) * dt;   /* ← bias correction applied HERE */
 
     /* Dynamic weight based on acceleration magnitude */
     float absAcc = sqrt(Ax * Ax + Ay * Ay + Az * Az);

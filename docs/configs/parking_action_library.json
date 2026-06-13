@@ -1,0 +1,128 @@
+{
+  "schema": "parking_action_library.v1",
+  "version": "2026-06-13-c2-steering",
+  "units": {
+    "distance": "cm",
+    "servo": "deg",
+    "pixel": "px",
+    "heading": "deg"
+  },
+  "scoring": {
+    "target": {
+      "slot_x_err_px": 0.0,
+      "slot_heading_err_deg": 0.0,
+      "slot_lateral_cm": 0.0,
+      "min_margin_px": 90.0,
+      "slot_y_dist_cm": 8.0
+    },
+    "weights": {
+      "slot_x_err_abs": 1.0,
+      "slot_heading_err_abs": 4.0,
+      "slot_lateral_abs": 8.0,
+      "progress": 0.35,
+      "min_margin_shortfall": 2.5,
+      "line_risk": 1000.0,
+      "phase_mismatch": 25.0,
+      "low_confidence": 20.0,
+      "uncalibrated": 15.0,
+      "large_steer": 3.0
+    }
+  },
+  "actions": [
+    {
+      "id": "reverse_straight_6",
+      "command": "MOVE D=-6.0 V=1",
+      "kind": "reverse_straight",
+      "distance_cm": 6.0,
+      "max_promote_cm": 6.0,
+      "requires_measured": false,
+      "servo": 90,
+      "allowed_phases": ["approach_entry", "align_in_corridor", "straighten_or_enter"],
+      "prior_delta": {
+        "slot_y_dist_cm": -4.0,
+        "slot_x_err_px": 0.0,
+        "slot_lateral_cm": 0.0,
+        "slot_heading_err_deg": 0.0,
+        "min_margin_px": -2.0
+      },
+      "prior_confidence": 0.35,
+      "notes": "Use as a neutral baseline. It should mainly reduce distance. Real-motion planner may use this prior when line margins and stability gates pass."
+    },
+    {
+      "id": "reverse_left_hard_6",
+      "command": "ARC D=-6.0 STE=60 V=1",
+      "kind": "reverse_arc",
+      "distance_cm": 6.0,
+      "max_promote_cm": 6.0,
+      "requires_measured": true,
+      "servo": 60,
+      "allowed_phases": ["approach_entry", "align_in_corridor"],
+      "prior_delta": {
+        "slot_y_dist_cm": -4.445,
+        "slot_x_err_px": 41.9,
+        "slot_lateral_cm": -2.664,
+        "slot_heading_err_deg": -0.979,
+        "min_margin_px": -0.51
+      },
+      "prior_confidence": 0.55,
+      "notes": "C2 2026-06-13: valid strong left-arc sample. Improved x_err -51.9px toward center; older 2026-06-12 sample worsened x_err +18px, so rely on bucketed measured response when available."
+    },
+    {
+      "id": "reverse_left_soft_6",
+      "command": "ARC D=-6.0 STE=75 V=1",
+      "kind": "reverse_arc",
+      "distance_cm": 6.0,
+      "max_promote_cm": 6.0,
+      "requires_measured": true,
+      "servo": 75,
+      "allowed_phases": ["approach_entry", "align_in_corridor"],
+      "prior_delta": {
+        "slot_y_dist_cm": -2.345,
+        "slot_x_err_px": -19.7,
+        "slot_lateral_cm": 1.138,
+        "slot_heading_err_deg": -0.514,
+        "min_margin_px": -26.373
+      },
+      "prior_confidence": 0.35,
+      "notes": "C2 2026-06-13: measured at x_err -30.5px and worsened lateral/x error. Keep available but let scoring penalize its predicted risk."
+    },
+    {
+      "id": "reverse_right_soft_6",
+      "command": "ARC D=-6.0 STE=105 V=1",
+      "kind": "reverse_arc",
+      "distance_cm": 6.0,
+      "max_promote_cm": 6.0,
+      "requires_measured": true,
+      "servo": 105,
+      "allowed_phases": ["approach_entry", "align_in_corridor"],
+      "prior_delta": {
+        "slot_y_dist_cm": -2.241,
+        "slot_x_err_px": -36.863,
+        "slot_lateral_cm": 2.656,
+        "slot_heading_err_deg": 3.494,
+        "min_margin_px": -3.927
+      },
+      "prior_confidence": 0.4,
+      "notes": "C2 2026-06-13: measured weak right arc. From small positive x_err it crossed center and worsened lateral error; useful as cautious right correction only with bucket match."
+    },
+    {
+      "id": "reverse_right_hard_6",
+      "command": "ARC D=-6.0 STE=120 V=1",
+      "kind": "reverse_arc",
+      "distance_cm": 6.0,
+      "max_promote_cm": 6.0,
+      "requires_measured": true,
+      "servo": 120,
+      "allowed_phases": ["approach_entry", "align_in_corridor"],
+      "prior_delta": {
+        "slot_y_dist_cm": -2.7,
+        "slot_x_err_px": -28.0,
+        "slot_lateral_cm": 1.67,
+        "slot_heading_err_deg": 1.8,
+        "min_margin_px": 0.0
+      },
+      "prior_confidence": 0.5,
+      "notes": "C2 2026-06-13: two valid strong right-arc samples, TLM R_eff about 86-90cm. Pixel delta is perspective-sensitive, so keep bucketed measured response preferred."
+    }
+  ]
+}

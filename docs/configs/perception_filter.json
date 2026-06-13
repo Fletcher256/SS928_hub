@@ -1,0 +1,13 @@
+{
+  "schema": "perception_filter.v1",
+  "required_frames": 5,
+  "gate_center_shift_cm": 4.0,
+  "gate_yaw_shift_deg": 8.0,
+  "gate_static_scale": 0.5,
+  "outlier_accept_consecutive": 3,
+  "hold_grace_sec": 2.5,
+  "hold_max_frames": 10,
+  "divergence_debounce_frames": 2,
+  "line_risk_debounce_frames": 1,
+  "notes": "thresholds derived from controller JSONL logs; line_risk intentionally not debounced"
+}
