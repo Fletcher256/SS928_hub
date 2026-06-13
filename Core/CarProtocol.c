@@ -165,15 +165,15 @@ static void PrintPwmStatusV2(uint16_t seq)
 {
 	if(seq > 0)
 	{
-		USART3_printf("PWM %u HEALTH=%u ANG=%.1f PULSE=%u PSC=%u ARR=%u CCR2=%u CCER=0x%04x RECOV=%u\r\n",
-		              seq, ServoPWM_IsHealthy(), ServoPWM_GetLastAngle(), ServoPWM_GetPulseUs(),
+		USART3_printf("PWM %u HEALTH=%u EN=%u ANG=%.1f PULSE=%u PSC=%u ARR=%u CCR2=%u CCER=0x%04x RECOV=%u\r\n",
+		              seq, ServoPWM_IsHealthy(), ServoPWM_IsAttached(), ServoPWM_GetLastAngle(), ServoPWM_GetPulseUs(),
 		              ServoPWM_GetPsc(), ServoPWM_GetArr(), ServoPWM_GetCcr2(), ServoPWM_GetCcer(),
 		              ServoPWM_GetRecoverCount());
 	}
 	else
 	{
-		USART3_printf("PWM HEALTH=%u ANG=%.1f PULSE=%u PSC=%u ARR=%u CCR2=%u CCER=0x%04x RECOV=%u\r\n",
-		              ServoPWM_IsHealthy(), ServoPWM_GetLastAngle(), ServoPWM_GetPulseUs(),
+		USART3_printf("PWM HEALTH=%u EN=%u ANG=%.1f PULSE=%u PSC=%u ARR=%u CCR2=%u CCER=0x%04x RECOV=%u\r\n",
+		              ServoPWM_IsHealthy(), ServoPWM_IsAttached(), ServoPWM_GetLastAngle(), ServoPWM_GetPulseUs(),
 		              ServoPWM_GetPsc(), ServoPWM_GetArr(), ServoPWM_GetCcr2(), ServoPWM_GetCcer(),
 		              ServoPWM_GetRecoverCount());
 	}

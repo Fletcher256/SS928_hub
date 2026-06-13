@@ -19,6 +19,8 @@
 
 #define AD_NUM 2
 
+#define ACKERMANN_WHEEL_BASE_CM 16.0f   // Front/rear axle distance, calibrate on the chassis.
+
 // ========== 里程计参数 ==========
 #define WHEEL_TRACK_CM   14.5f   // 后轮轮距(cm),两后轮中心间距,需实测标定
 
@@ -137,6 +139,10 @@ void lSpeedCycle_Frame(void);
 void rSpeedCycle_Frame(void);
 
 void PID_Speed(PID_t *p,SPEED_t *sp,int8_t is_right);
+
+void Motor_SetSpeedScale(float leftScale, float rightScale);
+
+void Motor_ResetSpeedScale(void);
 
 void HeadingPID_Init(HeadingPID_t *p);     // 初始化航向PID (设为默认值)
 

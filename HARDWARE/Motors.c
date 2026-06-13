@@ -142,6 +142,9 @@ float aveSpeed = 0;
 
 float diffSpeed = 0;
 
+static float LeftSpeedScale = 1.0f;
+static float RightSpeedScale = 1.0f;
+
 // ========== 里程计 ==========
 Odometry_t odom = {0};
 
@@ -201,6 +204,23 @@ void Odometry_Update(float left_speed_cms, float right_speed_cms)
 	odom.distance += fabsf(dc);
 }
 
+void Motor_SetSpeedScale(float leftScale, float rightScale)
+{
+	if(leftScale < -2.0f) leftScale = -2.0f;
+	if(rightScale < -2.0f) rightScale = -2.0f;
+	if(leftScale > 2.0f) leftScale = 2.0f;
+	if(rightScale > 2.0f) rightScale = 2.0f;
+
+	LeftSpeedScale = leftScale;
+	RightSpeedScale = rightScale;
+}
+
+void Motor_ResetSpeedScale(void)
+{
+	LeftSpeedScale = 1.0f;
+	RightSpeedScale = 1.0f;
+}
+
 void PID_Init(PID_t *p)
 {
 	p->Target = 0;
@@ -236,6 +256,8 @@ void InitAll()
 	aveSpeed = 0;
 
 	diffSpeed = 0;
+
+	Motor_ResetSpeedScale();
 }
 
 void Motor_Init()
@@ -477,7 +499,7 @@ void PID_Speed(PID_t *p,SPEED_t *sp,int8_t is_right)
 {
 	if(EXCOUNT(sp->SpeedCnt,20) == 1)
 	{	
-		p->Target = SpeedRank*RSPEEDSTEP/SPEEDSTEP;
+		p->Target = SpeedRank * (is_right ? RightSpeedScale : LeftSpeedScale) * RSPEEDSTEP / SPEEDSTEP;
 
 		p->Actual = sp->tSpeed;
 

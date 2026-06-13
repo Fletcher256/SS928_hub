@@ -36,6 +36,7 @@ $CommonFlags = @(
   '-IUSER',
   '-ICore',
   '-IHARDWARE',
+  '-IHARDWARE/BMI270',
   '-IDMP'
 )
 
@@ -66,7 +67,7 @@ $Sources = @(
   'START/system_stm32f10x.c',
   'USER/stm32f10x_it.c',
   'main.c',
-  'Core/CarApp.c',
+  'HARDWARE/CarApp.c',
   'Core/CarControl.c',
   'Core/CarProtocol.c',
   'Core/CommandParser.c',
@@ -76,7 +77,9 @@ $Sources = @(
   'HARDWARE/USART.c',
   'HARDWARE/Keys.c',
   'HARDWARE/Motors.c',
-  'HARDWARE/MPU6050.c',
+  'HARDWARE/YH8.c',
+  'HARDWARE/BMI270/bmi270_config.c',
+  'HARDWARE/BMI270/bmi270_driver.c',
   'HARDWARE/_MyI2C_.c',
   'HARDWARE/filter.c',
   'HARDWARE/generic.c',
