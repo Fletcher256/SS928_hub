@@ -13,6 +13,8 @@
  *  - Component Re-Trim (CRT) support
  */
 
+	
+
 #ifndef BMI270_CONFIG_H_
 #define BMI270_CONFIG_H_
 
