@@ -751,6 +751,16 @@
               <FilePath>.\HARDWARE\Keys.h</FilePath>
             </File>
             <File>
+              <FileName>key.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\HARDWARE\key.c</FilePath>
+            </File>
+            <File>
+              <FileName>key.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\HARDWARE\key.h</FilePath>
+            </File>
+            <File>
               <FileName>PWMO.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\HARDWARE\PWMO.c</FilePath>

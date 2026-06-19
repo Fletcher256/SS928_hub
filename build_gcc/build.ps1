@@ -76,6 +76,7 @@ $Sources = @(
   'HARDWARE/PWMO.c',
   'HARDWARE/USART.c',
   'HARDWARE/Keys.c',
+  'HARDWARE/key.c',
   'HARDWARE/Motors.c',
   'HARDWARE/YH8.c',
   'HARDWARE/BMI270/bmi270_config.c',

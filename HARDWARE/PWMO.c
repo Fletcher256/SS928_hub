@@ -132,11 +132,13 @@ void ServoPWM_Detach(void)
 
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
 	GPIO_ResetBits(GPIOA, GPIO_Pin_1);
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+	//浮空直接锁位了对于这个舵机,这样也够了其实?
+	//对于实际的地面可能不够用但也没办法暂时用着先看看了。
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1;
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
 	GPIO_Init(GPIOA, &GPIO_InitStructure);
-	GPIO_ResetBits(GPIOA, GPIO_Pin_1);
+	//GPIO_ResetBits(GPIOA, GPIO_Pin_1);
 
 	ServoPWMAttached = 0;
 }

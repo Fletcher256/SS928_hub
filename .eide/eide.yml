@@ -74,6 +74,8 @@ virtualFolder:
     - path: HARDWARE/CarApp.c
     - path: HARDWARE/BMI270/bmi270_driver.c
     - path: HARDWARE/BMI270/bmi270_config.c
+    - path: HARDWARE/key.c
+    - path: HARDWARE/key.h
   folders:
     - name: libs
       files:

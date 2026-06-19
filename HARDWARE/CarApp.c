@@ -11,6 +11,7 @@
 #include "_MyI2C_.h"
 #include "filter.h"
 #include "LED.h"
+#include "key.h"
 
 static volatile uint16_t MpuTaskElapsedMs = 0;
 static volatile uint8_t StraightTaskReady = 0;
@@ -81,6 +82,7 @@ void CarApp_Run(void)
 
 	LED_Init();
 	USART3_Init();
+	DataCaptureKey_Init();
 	/* I2C diag: scan + try reading Chip ID directly */
 	{
 		i2cbus_struct scan_bus;
@@ -131,6 +133,7 @@ void CarApp_Run(void)
 		ServiceStraightTask();
 		ServiceServoTask();
 		UpdateControlTask();
+		DataCaptureKey_Service();
 
 
 		//USART3_printf("%d,%d,%d,%d,%d,%d\r\n",MD.xAcc,MD.yAcc,MD.zAcc,MD.xGyro,MD.yGyro,MD.zGyro);
@@ -149,6 +152,7 @@ void CarApp_Run(void)
 void SysTick_Handler(void)
 {
 	ControlTicks++;
+	DataCaptureKey_SysTick();
 	//GetALLData(&MD);
 	//CalEulerAngleHandler(&MD);
 	//ComplementaryFilter(&MD);

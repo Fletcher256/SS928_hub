@@ -220,7 +220,6 @@ void PrintTelemetry(void)
 void SetStandbyMode(void)
 {
 	HardStopMotion();
-	ServoPWM_Detach();
 	rS = STANDBY;
 	SetLEDs(GPIO_Pin_14);
 }

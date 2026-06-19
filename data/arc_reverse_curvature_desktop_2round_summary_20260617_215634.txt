@@ -1,0 +1,22 @@
+﻿surface=desktop
+motion=reverse_arc
+rounds=2
+jsonl=D:\code_space\IDE\Keil\STM32\FILES\car_6050_v2_copy\data\arc_reverse_curvature_desktop_2round_20260617_215634.jsonl
+raw=D:\code_space\IDE\Keil\STM32\FILES\car_6050_v2_copy\data\arc_reverse_curvature_desktop_2round_raw_20260617_215634.txt
+count=8
+
+per_sample:
+round=1 STE=60 dyaw=-6.700 d=6.000 deg_per_cm=-1.116667 r_eff=51.310 coast=0.000 done="DONE 7007 ARC"
+round=1 STE=75 dyaw=-4.000 d=6.200 deg_per_cm=-0.645161 r_eff=88.808 coast=0.000 done="DONE 7015 ARC"
+round=1 STE=105 dyaw=0.200 d=6.800 deg_per_cm=0.029412 r_eff=1,948.057 coast=0.000 done="DONE 7023 ARC"
+round=1 STE=120 dyaw=2.400 d=4.900 deg_per_cm=0.489796 r_eff=116.979 coast=0.000 done="DONE 7031 ARC"
+round=2 STE=60 dyaw=-6.200 d=5.200 deg_per_cm=-1.192308 r_eff=48.055 coast=0.000 done="DONE 7039 ARC"
+round=2 STE=75 dyaw=-3.900 d=6.000 deg_per_cm=-0.650000 r_eff=88.147 coast=0.000 done="DONE 7047 ARC"
+round=2 STE=105 dyaw=0.100 d=7.100 deg_per_cm=0.014085 r_eff=4,068.000 coast=0.000 done="DONE 7055 ARC"
+round=2 STE=120 dyaw=2.300 d=4.900 deg_per_cm=0.469388 r_eff=122.065 coast=0.000 done="DONE 7063 ARC"
+
+aggregate_by_ste:
+STE=60 n=2 mean_deg_per_cm=-1.154487 std=0.053486 cv=4.63% mean_r_eff=49.629 mean_d=5.600 mean_dyaw=-6.450 mean_coast=0.000
+STE=75 n=2 mean_deg_per_cm=-0.647581 std=0.003421 cv=0.53% mean_r_eff=88.477 mean_d=6.100 mean_dyaw=-3.950 mean_coast=0.000
+STE=105 n=2 mean_deg_per_cm=0.021748 std=0.010838 cv=49.83% mean_r_eff=2,634.515 mean_d=6.950 mean_dyaw=0.150 mean_coast=0.000
+STE=120 n=2 mean_deg_per_cm=0.479592 std=0.014431 cv=3.01% mean_r_eff=119.468 mean_d=4.900 mean_dyaw=2.350 mean_coast=0.000

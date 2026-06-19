@@ -19,7 +19,7 @@
 
 #define AD_NUM 2
 
-#define ACKERMANN_WHEEL_BASE_CM 16.0f   // Front/rear axle distance, calibrate on the chassis.
+#define ACKERMANN_WHEEL_BASE_CM 14.8f   // Front/rear axle distance, calibrate on the chassis.
 
 // ========== 里程计参数 ==========
 #define WHEEL_TRACK_CM   14.5f   // 后轮轮距(cm),两后轮中心间距,需实测标定

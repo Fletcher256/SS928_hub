@@ -1,0 +1,10 @@
+﻿surface=desktop
+motion=reverse_arc
+retry=servo_attach_before_each
+jsonl=D:\code_space\IDE\Keil\STM32\FILES\car_6050_v2_copy\data\arc_reverse_curvature_desktop_retry_20260617_214006.jsonl
+raw=D:\code_space\IDE\Keil\STM32\FILES\car_6050_v2_copy\data\arc_reverse_curvature_desktop_retry_raw_20260617_214006.txt
+count=4
+STE=60 dyaw=-6.500 d=5.800 deg_per_cm=-1.120690 r_eff=51.125 coast=0.000 pwm="PWM 4004 HEALTH=1 EN=1 ANG=60.0 PULSE=1333 PSC=71 ARR=19999 CCR2=1333 CCER=0x0010 RECOV=0" done="DONE 4006 ARC"
+STE=75 dyaw=-3.900 d=6.200 deg_per_cm=-0.629032 r_eff=91.086 coast=0.000 pwm="PWM 4012 HEALTH=1 EN=1 ANG=75.0 PULSE=1416 PSC=71 ARR=19999 CCR2=1416 CCER=0x0010 RECOV=0" done="DONE 4014 ARC"
+STE=105 dyaw=0.200 d=6.800 deg_per_cm=0.029412 r_eff=1,948.057 coast=0.000 pwm="PWM 4020 HEALTH=1 EN=1 ANG=105.0 PULSE=1583 PSC=71 ARR=19999 CCR2=1583 CCER=0x0010 RECOV=0" done="DONE 4022 ARC"
+STE=120 dyaw=2.300 d=4.900 deg_per_cm=0.469388 r_eff=122.065 coast=0.000 pwm="PWM 4028 HEALTH=1 EN=1 ANG=120.0 PULSE=1666 PSC=71 ARR=19999 CCR2=1666 CCER=0x0010 RECOV=0" done="DONE 4030 ARC"
