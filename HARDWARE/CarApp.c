@@ -51,17 +51,27 @@ static void ServiceMpuTask(void)
 	{
 		BMI270_SetVehicleMoving((aveSpeed > 0.01f) ? 1 : 0);
 		BMI270_Get_AngleDt(&MM, (float)elapsedMs * 0.001f);
-		New_Pitch = KalmanFilter_Update(&Kal_Pitch,MM.pitch);
-		New_Roll = KalmanFilter_Update(&Kal_Roll,MM.roll);
-		New_Yaw = KalmanFilter_Update(&Kal_Yaw,MM.yaw);
+		if(BMI270_WasLastReadOk() && !BMI270_IsFault())
+		{
+			New_Pitch = KalmanFilter_Update(&Kal_Pitch,MM.pitch);
+			New_Roll = KalmanFilter_Update(&Kal_Roll,MM.roll);
+			New_Yaw = KalmanFilter_Update(&Kal_Yaw,MM.yaw);
+		}
 	}
 }
 
 static void ServiceStraightTask(void)
 {
-	if(TakeTaskFlag(&StraightTaskReady) && is_straight)
+	if(TakeTaskFlag(&StraightTaskReady) && is_straight && SpeedRank != 0)
 	{
-		keep_straight();
+		if(BMI270_IsFault())
+		{
+			SetSteeringAngle(90.0f);
+		}
+		else
+		{
+			keep_straight();
+		}
 	}
 }
 
@@ -142,7 +152,9 @@ void CarApp_Run(void)
 		//USART3_printf("%f,%f,%f,%f,%f,%f,%f\r\n",EA.MPU6050_Yaw,EA.MPU6050_Roll,EA.MPU6050_Pitch,MD.zAcc*G*16/(0X7FFF),atan2(MD.xAcc,MD.yAcc)/PI*180,atan2(MD.yAcc,MD.zAcc)/PI*180,atan2(MD.xAcc,MD.zAcc)/PI*180);
 		 //USART3_printf("%.3f,%.3f,%.3f\r\n", MM.roll, MM.pitch, MM.yaw);
 		 //USART3_printf("%f,%f,%f,%d,%f,%f\r\n",rSpeed.Speed,lSpeed.Speed,aveSpeed,SpeedRank,rSpeed_PID.Out,lSpeed_PID.Out);
-		 if(TakeTaskFlag(&TelemetryReady) && CarProtocol_IsTelemetryEnabled())
+		 if(TakeTaskFlag(&TelemetryReady) &&
+		    CarProtocol_IsTelemetryEnabled() &&
+		    IsAutoMotionMode())
 		 {
 			 PrintTelemetry();
 		 }
@@ -198,7 +210,7 @@ void SysTick_Handler(void)
 		aveSpeed = (rSpeed.Speed + lSpeed.Speed)*0.5f;
 	}
 
-	if(EXCOUNT(TelemetryCnt,100) == 1)
+	if(EXCOUNT(TelemetryCnt,200) == 1)
 	{
 		TelemetryReady = 1;
 	}

@@ -67,6 +67,40 @@ static void ReplyDone(uint16_t seq, const char *cmd, const char *extra)
 	}
 }
 
+static void ReplyDoneWithTerminalState(uint16_t seq, const char *cmd, const char *extra)
+{
+	Odometry_t snapshot;
+
+	Odometry_GetSnapshot(&snapshot);
+	if(extra != 0 && extra[0] != '\0')
+	{
+		if(seq > 0)
+		{
+			USART3_printf("DONE %u %s %s X=%.1f Y=%.1f D=%.1f YAW=%.1f\r\n",
+			              seq, cmd, extra, snapshot.x, snapshot.y, snapshot.distance,
+			              GetReportedYaw());
+		}
+		else
+		{
+			USART3_printf("DONE %s %s X=%.1f Y=%.1f D=%.1f YAW=%.1f\r\n",
+			              cmd, extra, snapshot.x, snapshot.y, snapshot.distance,
+			              GetReportedYaw());
+		}
+	}
+	else if(seq > 0)
+	{
+		USART3_printf("DONE %u %s X=%.1f Y=%.1f D=%.1f YAW=%.1f\r\n",
+		              seq, cmd, snapshot.x, snapshot.y, snapshot.distance,
+		              GetReportedYaw());
+	}
+	else
+	{
+		USART3_printf("DONE %s X=%.1f Y=%.1f D=%.1f YAW=%.1f\r\n",
+		              cmd, snapshot.x, snapshot.y, snapshot.distance,
+		              GetReportedYaw());
+	}
+}
+
 static void ReplyErr(uint16_t seq, const char *code)
 {
 	if(seq > 0)
@@ -76,6 +110,25 @@ static void ReplyErr(uint16_t seq, const char *code)
 	else
 	{
 		USART3_printf("ERR CODE=%s\r\n", code);
+	}
+}
+
+static void ReplyErrWithTerminalState(uint16_t seq, const char *code)
+{
+	Odometry_t snapshot;
+
+	Odometry_GetSnapshot(&snapshot);
+	if(seq > 0)
+	{
+		USART3_printf("ERR %u CODE=%s X=%.1f Y=%.1f D=%.1f YAW=%.1f\r\n",
+		              seq, code, snapshot.x, snapshot.y, snapshot.distance,
+		              GetReportedYaw());
+	}
+	else
+	{
+		USART3_printf("ERR CODE=%s X=%.1f Y=%.1f D=%.1f YAW=%.1f\r\n",
+		              code, snapshot.x, snapshot.y, snapshot.distance,
+		              GetReportedYaw());
 	}
 }
 
@@ -105,7 +158,7 @@ void CarProtocol_FinishActiveMotionOk(const char *extra)
 {
 	if(ActiveMotionValid)
 	{
-		ReplyDone(ActiveMotionSeq, ActiveMotionName, extra);
+		ReplyDoneWithTerminalState(ActiveMotionSeq, ActiveMotionName, extra);
 		ActiveMotionValid = 0;
 		ActiveMotionSeq = 0;
 		ActiveMotionName[0] = '\0';
@@ -116,7 +169,7 @@ void CarProtocol_FinishActiveMotionErr(const char *code)
 {
 	if(ActiveMotionValid)
 	{
-		ReplyErr(ActiveMotionSeq, code);
+		ReplyErrWithTerminalState(ActiveMotionSeq, code);
 		ActiveMotionValid = 0;
 		ActiveMotionSeq = 0;
 		ActiveMotionName[0] = '\0';
@@ -149,15 +202,17 @@ static void PrintStatusV2(uint16_t seq)
 	dropped = USART3_GetDroppedTextCount();
 	if(seq > 0)
 	{
-		USART3_printf("STAT %u MODE=%s RUN=%s DIR=%d SPD=%d ANG=%.1f YAW=%.1f X=%.1f Y=%.1f D=%.1f VEL=%.1f DROP=%u\r\n",
+		USART3_printf("STAT %u MODE=%s RUN=%s DIR=%d SPD=%d ANG=%.1f YAW=%.1f X=%.1f Y=%.1f D=%.1f VEL=%.1f DROP=%u IMU=%s\r\n",
 		              seq, ControlModeName(), RunStateName(), is_up, SpeedRank, Angle,
-		              GetReportedYaw(), snapshot.x, snapshot.y, snapshot.distance, aveSpeed, dropped);
+		              GetReportedYaw(), snapshot.x, snapshot.y, snapshot.distance, aveSpeed, dropped,
+		              BMI270_IsFault() ? "FAULT" : "OK");
 	}
 	else
 	{
-		USART3_printf("STAT MODE=%s RUN=%s DIR=%d SPD=%d ANG=%.1f YAW=%.1f X=%.1f Y=%.1f D=%.1f VEL=%.1f DROP=%u\r\n",
+		USART3_printf("STAT MODE=%s RUN=%s DIR=%d SPD=%d ANG=%.1f YAW=%.1f X=%.1f Y=%.1f D=%.1f VEL=%.1f DROP=%u IMU=%s\r\n",
 		              ControlModeName(), RunStateName(), is_up, SpeedRank, Angle,
-		              GetReportedYaw(), snapshot.x, snapshot.y, snapshot.distance, aveSpeed, dropped);
+		              GetReportedYaw(), snapshot.x, snapshot.y, snapshot.distance, aveSpeed, dropped,
+		              BMI270_IsFault() ? "FAULT" : "OK");
 	}
 }
 
@@ -239,7 +294,7 @@ static uint8_t ApplyHeadingParams(char *tokens[], uint8_t count)
 	if(CommandParser_GetFloatArg(tokens, count, "KI", &value)) { headingPID.Ki = value; changed = 1; }
 	if(CommandParser_GetFloatArg(tokens, count, "KD", &value)) { headingPID.Kd = value; changed = 1; }
 	if(CommandParser_GetFloatArg(tokens, count, "MAXI", &value)) { headingPID.MaxI = value; changed = 1; }
-	if(CommandParser_GetFloatArg(tokens, count, "MAXOUT", &value)) { headingPID.MaxOut = value; changed = 1; }
+	if(CommandParser_GetFloatArg(tokens, count, "MAXOUT", &value)) { headingPID.MaxOut = ClampFloat(value, 0.0f, TURN_SERVO_MAX_OFFSET); changed = 1; }
 	if(CommandParser_GetFloatArg(tokens, count, "DEAD", &value)) { headingPID.Deadband = value; changed = 1; }
 	if(CommandParser_GetFloatArg(tokens, count, "D_ALPHA", &value)) { headingPID.D_Alpha = ClampFloat(value, 0.0f, 1.0f); changed = 1; }
 	if(CommandParser_GetFloatArg(tokens, count, "SMOOTH", &value)) { headingPID.SmoothAlpha = ClampFloat(value, 0.0f, 1.0f); changed = 1; }
@@ -297,12 +352,12 @@ static uint8_t ApplyLimitParams(char *tokens[], uint8_t count)
 
 	if(CommandParser_GetFloatArg(tokens, count, "STE_MIN", &value))
 	{
-		newMin = ClampFloat(value, 0.0f, 180.0f);
+		newMin = ClampFloat(value, SERVO_SAFE_MIN_ANGLE, SERVO_SAFE_MAX_ANGLE);
 		changed = 1;
 	}
 	if(CommandParser_GetFloatArg(tokens, count, "STE_MAX", &value))
 	{
-		newMax = ClampFloat(value, 0.0f, 180.0f);
+		newMax = ClampFloat(value, SERVO_SAFE_MIN_ANGLE, SERVO_SAFE_MAX_ANGLE);
 		changed = 1;
 	}
 	if(newMin >= newMax)
@@ -351,8 +406,8 @@ static void RestoreDefaultRuntimeConfig(void)
 	lSpeed_PID.Kd = KD;
 	SpeedLimitLevel = AUTO_MAX_SPEED;
 	AutoSpeedLevel = AUTO_DEFAULT_SPEED;
-	SteerMinAngle = 0.0f;
-	SteerMaxAngle = 180.0f;
+	SteerMinAngle = SERVO_SAFE_MIN_ANGLE;
+	SteerMaxAngle = SERVO_SAFE_MAX_ANGLE;
 	InitAll();
 	HeadingPID_Reset(&headingPID);
 	SetSteeringAngle(90.0f);
@@ -364,6 +419,8 @@ static uint8_t IsV2CommandName(const char *token)
 	        strcmp(token, "VER") == 0 ||
 	        strcmp(token, "STAT") == 0 ||
 	        strcmp(token, "PWM_STAT") == 0 ||
+	        strcmp(token, "GDIAG") == 0 ||
+	        strcmp(token, "GYROCAL") == 0 ||
 	        strcmp(token, "TEL") == 0 ||
 	        strcmp(token, "STOP") == 0 ||
 	        strcmp(token, "CANCEL") == 0 ||
@@ -457,6 +514,27 @@ static void HandleV2Telemetry(char *tokens[], uint8_t count, uint8_t cmdIndex, u
 	else
 	{
 		ReplyErr(seq, "BAD_ARG");
+	}
+}
+
+static void HandleV2GyroCal(uint16_t seq)
+{
+	if(IsAutoMotionMode())
+	{
+		ReplyErr(seq, "BUSY");
+		return;
+	}
+
+	if(BMI270_RunGyroCal(&MM, 200) == 0)
+	{
+		YawReportOffset = New_Yaw;
+		Org_Yaw = New_Yaw;
+		TargetYaw = New_Yaw;
+		ReplyDone(seq, "GYROCAL", "IMU=OK");
+	}
+	else
+	{
+		ReplyErr(seq, "IMU_CAL_FAIL");
 	}
 }
 
@@ -665,6 +743,15 @@ static uint8_t HandleV2Command(char *pBuffer)
 	{
 		PrintPwmStatusV2(seq);
 	}
+	else if(strcmp(cmd, "GDIAG") == 0)
+	{
+		BMI270_PrintGyroDiag(&MM);
+		ReplyDone(seq, "GDIAG", "");
+	}
+	else if(strcmp(cmd, "GYROCAL") == 0)
+	{
+		HandleV2GyroCal(seq);
+	}
 	else if(strcmp(cmd, "TEL") == 0)
 	{
 		HandleV2Telemetry(tokens, count, cmdIndex, seq);
@@ -780,7 +867,7 @@ static CommandResult_t HandleRcSimpleCommand(char *pBuffer)
 	}
 	if(strcmp(command, "RC_STAT") == 0)
 	{
-		PrintTelemetry();
+		PrintLegacyTelemetry();
 		return CMD_HANDLED;
 	}
 	if(strcmp(command, "RC_STR") == 0)

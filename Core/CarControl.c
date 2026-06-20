@@ -32,8 +32,8 @@ volatile uint32_t ControlTicks = 0;
 float TargetYaw = 0.0f;
 uint8_t AutoSpeedLevel = AUTO_DEFAULT_SPEED;
 uint8_t SpeedLimitLevel = AUTO_MAX_SPEED;
-float SteerMinAngle = 0.0f;
-float SteerMaxAngle = 180.0f;
+float SteerMinAngle = SERVO_SAFE_MIN_ANGLE;
+float SteerMaxAngle = SERVO_SAFE_MAX_ANGLE;
 float YawReportOffset = 0.0f;
 
 typedef enum ControlMode
@@ -59,6 +59,7 @@ static ControlMode_t ControlMode = CTRL_IDLE;
 static AutoStep_t AutoStep = AUTO_IDLE;
 static uint32_t LastCommandTick = 0;
 static uint32_t ActionStartTick = 0;
+static uint32_t LastSteeringCommandTick = 0;
 static float TargetDistanceCm = 0.0f;
 
 #define ACKERMANN_CENTER_DEG      90.0f
@@ -128,6 +129,7 @@ void RefreshCommandWatchdog(void)
 void SetSteeringAngle(float angle)
 {
 	Angle = ClampFloat(angle, SteerMinAngle, SteerMaxAngle);
+	LastSteeringCommandTick = ControlTicks;
 	SetServoRotation(Angle);
 }
 
@@ -180,6 +182,18 @@ static void HardStopMotion(void)
 }
 
 void PrintTelemetry(void)
+{
+	Odometry_t snapshot;
+	static uint8_t telemetrySeq = 0;
+
+	Odometry_GetSnapshot(&snapshot);
+	USART3_printf("TLM %u YAW=%.1f X=%.1f Y=%.1f D=%.1f V=%.1f ANG=%.1f IMU=%s\r\n",
+	              telemetrySeq++, GetReportedYaw(), snapshot.x, snapshot.y,
+	              snapshot.distance, aveSpeed, Angle,
+	              BMI270_IsFault() ? "FAULT" : "OK");
+}
+
+void PrintLegacyTelemetry(void)
 {
 	Odometry_t snapshot;
 
@@ -325,6 +339,11 @@ uint8_t StartDistanceDrive(float distanceCm)
 
 static uint8_t PrepareYawTurn(float relativeYawDeg)
 {
+	if(BMI270_IsFault())
+	{
+		return 0;
+	}
+
 	if(AbsFloat(relativeYawDeg) < TURN_DONE_DEG)
 	{
 		return 0;
@@ -469,8 +488,21 @@ static uint8_t UpdateYawTurn(void)
 	return 0;
 }
 
+static void ServiceIdleServoHold(void)
+{
+	if(SpeedRank == 0 &&
+	   ServoPWM_IsAttached() &&
+	   (ControlMode == CTRL_IDLE || ControlMode == CTRL_MANUAL || ControlMode == CTRL_STRAIGHT) &&
+	   (uint32_t)(ControlTicks - LastSteeringCommandTick) > SERVO_IDLE_HOLD_MS)
+	{
+		ServoPWM_Detach();
+	}
+}
+
 void UpdateControlTask(void)
 {
+	ServiceIdleServoHold();
+
 	if((ControlMode == CTRL_MANUAL || ControlMode == CTRL_STRAIGHT) &&
 	   SpeedRank != 0 &&
 	   (uint32_t)(ControlTicks - LastCommandTick) > REMOTE_TIMEOUT_MS)
@@ -503,6 +535,15 @@ void UpdateControlTask(void)
 			USART3_printf("Turn timeout stop!\r\n");
 		}
 		CarProtocol_FinishActiveMotionErr("TIMEOUT");
+		return;
+	}
+
+	if((ControlMode == CTRL_TURN_YAW ||
+	   (ControlMode == CTRL_AUTO_ROUTE && AutoStep == AUTO_TURN1)) &&
+	   BMI270_IsFault())
+	{
+		SetStandbyMode();
+		CarProtocol_FinishActiveMotionErr("IMU_FAULT");
 		return;
 	}
 

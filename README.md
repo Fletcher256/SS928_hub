@@ -53,7 +53,7 @@ New remote/autonomous commands:
 - `RC_HB`: heartbeat. Use it periodically when driving manually.
 - `RC_STR`: straight-hold mode using IMU heading and encoder cross-track correction.
 - `RC_SPDn`: set speed rank, `n` is `0..6`.
-- `RC_STEx`: set servo angle directly, `x` is `0..180`.
+- `RC_STEx`: set servo angle directly, clamped to the configured safe steering window. The firmware default is `55..125`.
 - `RC_DSTx`: drive straight for `x` cm. Negative values drive backward.
 - `RC_YAWx`: turn by `x` degrees relative to current yaw. Positive is left.
 - `RC_AUTO` or `AU_RUN`: run the default autonomous route: forward 100 cm, left 90 degrees, forward 60 cm, stop.

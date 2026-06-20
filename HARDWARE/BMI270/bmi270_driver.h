@@ -106,7 +106,7 @@ float BMI270_GetTemp(BMI270 *this);
 void BMI270_Get_AngleDt(BMI270 *this, float dt);
 
 /*===========================================================================*/
-/*! @name     Calibration API                                                 */
+/*! @name     Calibration & Diagnostics API                                   */
 /*===========================================================================*/
 
 /*!
@@ -116,5 +116,14 @@ void BMI270_Get_AngleDt(BMI270 *this, float dt);
  *         Prevents slow-turn gyro signal from being absorbed into bias estimate.
  */
 void BMI270_SetVehicleMoving(uint8_t moving);
+
+uint8_t BMI270_IsFault(void);
+uint8_t BMI270_WasLastReadOk(void);
+uint32_t BMI270_GetI2cErrorCount(void);
+int16_t BMI270_GetGyroZeroZ(void);
+float BMI270_GetGyroScale(void);
+float BMI270_GetSampleDt(void);
+int8_t BMI270_RunGyroCal(BMI270 *this, uint16_t samples);
+void BMI270_PrintGyroDiag(BMI270 *this);
 
 #endif /* BMI270_DRIVER_H_ */

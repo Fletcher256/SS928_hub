@@ -319,6 +319,11 @@ static void bmi2_set_power_ctrl(uint8_t acc_en, uint8_t gyr_en)
 static float bmi270_dt;                    /*!< Sample time interval (seconds) */
 static float bmi270_gyro_scale;           /*!< Gyro LSB to rad/s scale */
 static float bmi270_accel_scale;          /*!< Accel LSB to g scale */
+static volatile uint8_t bmi270_imu_fault = 1;
+static volatile uint8_t bmi270_last_read_ok = 0;
+static volatile uint32_t bmi270_i2c_error_count = 0;
+static uint8_t bmi270_gyr_range_reg = BMI2_GYR_RANGE_2000;
+static uint8_t bmi270_gyr_z_sat_count = 0;
 
 /* Calibration reference angles */
 static float angle_yaw   = 0.0f;
@@ -376,6 +381,21 @@ PT1Filter_t pt1_filter_x, pt1_filter_y, pt1_filter_z;
 PT1Filter_t pt1_filter_gx, pt1_filter_gy, pt1_filter_gz;
 #endif
 
+static void BMI270_ClearRaw(BMI270 *this)
+{
+    this->AccX = 0;
+    this->AccY = 0;
+    this->AccZ = 0;
+    this->GyroX = 0;
+    this->GyroY = 0;
+    this->GyroZ = 0;
+}
+
+static void BMI270_MarkFault(void)
+{
+    bmi270_imu_fault = 1;
+}
+
 /*!
  * @brief Software gyro zero-offset calibration
  * @param calibration_samples : Number of samples to average (typical: 1000)
@@ -398,6 +418,7 @@ static int8_t BMI270_SoftCalibrate_Z(uint16_t calibration_samples)
     /* ── Phase 1: Accumulate calibration samples ── */
     for (i = 0; i < calibration_samples; i++) {
         if (BMI270_READ_REG_CONTINUE_STATUS(BMI2_GYR_X_LSB_ADDR, 6, temp_buffer) != 0) {
+            bmi270_i2c_error_count++;
             return -1;
         }
         GyroX = ((int16_t)(temp_buffer[1] << 8) | temp_buffer[0]);
@@ -426,6 +447,7 @@ static int8_t BMI270_SoftCalibrate_Z(uint16_t calibration_samples)
 
     for (i = 0; i < verify_samples; i++) {
         if (BMI270_READ_REG_CONTINUE_STATUS(BMI2_GYR_X_LSB_ADDR, 6, temp_buffer) != 0) {
+            bmi270_i2c_error_count++;
             return -1;
         }
         GyroX = ((int16_t)(temp_buffer[1] << 8) | temp_buffer[0]) - cand_zero_x;
@@ -437,12 +459,11 @@ static int8_t BMI270_SoftCalibrate_Z(uint16_t calibration_samples)
         gz_sum += GyroZ;
         BMI270_DELAY_MS((uint32_t)(bmi270_dt * 1000.0f));
     }
-
-    /* Fail if ANY axis residual mean >= 2 LSB */
+    /* Fail if residual mean exceeds threshold. Keep yaw (Z) stricter to avoid drift. */
     if (abs((int)(gx_sum / (int32_t)verify_samples)) >= 2 ||
         abs((int)(gy_sum / (int32_t)verify_samples)) >= 2 ||
-        abs((int)(gz_sum / (int32_t)verify_samples)) >= 2) {
-        return -1;  /* gyro_zero untouched — caller will retry */
+        abs((int)(gz_sum / (int32_t)verify_samples)) >= 1) {
+        return -1;
     }
 
     /* Only commit AFTER verification passes */
@@ -475,13 +496,19 @@ static int8_t BMI270_SoftCalibrate_Z(uint16_t calibration_samples)
  *
  * Note: Temperature is NOT in the burst stream (separate reg 0x22-0x23)
  */
-static void BMI270_Get_Raw(BMI270 *this)
+static int8_t BMI270_Get_Raw(BMI270 *this)
 {
     static uint8_t temp_buffer[12];
+    int16_t raw_gyro_z;
 
     if (BMI270_READ_REG_CONTINUE_STATUS(BMI2_ACC_X_LSB_ADDR, 12, temp_buffer) != 0) {
-        return;
+        bmi270_i2c_error_count++;
+        bmi270_last_read_ok = 0;
+        BMI270_ClearRaw(this);
+        BMI270_MarkFault();
+        return -1;
     }
+    bmi270_last_read_ok = 1;
 
     /* Parse 12-byte burst — BMI270 LSB first, MSB second (little-endian) */
     this->AccX  = ((int16_t)(temp_buffer[1] << 8) | temp_buffer[0]);
@@ -490,6 +517,18 @@ static void BMI270_Get_Raw(BMI270 *this)
     this->GyroX = ((int16_t)(temp_buffer[7] << 8) | temp_buffer[6]);
     this->GyroY = ((int16_t)(temp_buffer[9] << 8) | temp_buffer[8]);
     this->GyroZ = ((int16_t)(temp_buffer[11] << 8) | temp_buffer[10]);
+    raw_gyro_z = this->GyroZ;
+
+    if (abs(raw_gyro_z) >= 32000) {
+        if (bmi270_gyr_z_sat_count < 255U) {
+            bmi270_gyr_z_sat_count++;
+        }
+        if (bmi270_gyr_z_sat_count >= 20U) {
+            BMI270_MarkFault();
+        }
+    } else {
+        bmi270_gyr_z_sat_count = 0;
+    }
 
     /* Apply software gyro calibration */
     this->GyroX = this->GyroX - gyro_zero_x;
@@ -505,6 +544,7 @@ static void BMI270_Get_Raw(BMI270 *this)
     this->GyroY = (int16_t)PT1Filter_Apply(&pt1_filter_gy, (float)this->GyroY);
     this->GyroZ = (int16_t)PT1Filter_Apply(&pt1_filter_gz, (float)this->GyroZ);
 #endif
+    return 0;
 }
 
 /*!
@@ -516,6 +556,7 @@ static int16_t BMI270_Get_RawTemp(void)
 {
     uint8_t buf[2];
     if (BMI270_READ_REG_CONTINUE_STATUS(BMI2_TEMPERATURE_0_ADDR, 2, buf) != 0) {
+        bmi270_i2c_error_count++;
         return 0;
     }
     return ((int16_t)(buf[1] << 8) | buf[0]);
@@ -564,6 +605,10 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
     int8_t  rslt;
     int     i;
 
+    bmi270_imu_fault = 1;
+    bmi270_last_read_ok = 0;
+    bmi270_gyr_z_sat_count = 0;
+
     /* 1. Initialize SW-I2C */
     MyI2C_Init(&bmi270_i2cbus,
                GPIOx, SCl,
@@ -581,6 +626,7 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
     if (chip_id != BMI270_CHIP_ID) {
         //因为SDO拉高/悬空了导致这个端口的电平时高电平,地址是0X69。。若SDO拉低是0X68
         USART3_printf("[BMI270] FAIL: chip not found or wrong ID!,Error ID: 0x%02X\r\n", chip_id);
+        BMI270_MarkFault();
         return;
     }
     USART3_printf("[BMI270] Chip ID OK\r\n");
@@ -590,6 +636,7 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
     rslt = bmi2_upload_config();
     if (rslt != BMI2_OK) {
         USART3_printf("[BMI270] FAIL: config upload error %d\r\n", rslt);
+        BMI270_MarkFault();
         return;
     }
     USART3_printf("[BMI270] Config upload OK\r\n");
@@ -606,6 +653,7 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
                           BMI2_GYR_NORMAL_MODE,
                           BMI2_POWER_OPT_MODE,
                           BMI2_PERF_OPT_MODE);
+    bmi270_gyr_range_reg = BMI2_GYR_RANGE_2000;
 
     /* 7. Enable accel + gyro */
     bmi2_set_power_ctrl(1, 1);
@@ -648,9 +696,11 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
             }
         }
         if (i < 3) {
+            bmi270_imu_fault = 0;
             USART3_printf("[BMI270] SW Gyro cal OK (attempt %d)\r\n", i + 1);
         } else {
-            USART3_printf("[BMI270] WARN: SW gyro cal failed, using raw offsets\r\n");
+            BMI270_MarkFault();
+            USART3_printf("[BMI270] FAIL: SW gyro cal failed, IMU fault set\r\n");
         }
         USART3_printf("[BMI270] SW Gyro offsets: X=%d Y=%d Z=%d\r\n",
                       (int)gyro_zero_x, (int)gyro_zero_y, (int)gyro_zero_z);
@@ -689,6 +739,10 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
         /* 4c: Try burst read with status check */
         read_rslt = BMI270_READ_REG_CONTINUE_STATUS(BMI2_ACC_X_LSB_ADDR, 12, buf);
         USART3_printf("[BMI270] Burst read result: %d (0=OK, 1=NACK)\r\n", read_rslt);
+        if (read_rslt != 0) {
+            bmi270_i2c_error_count++;
+            BMI270_MarkFault();
+        }
 
         /* 4d: Also try single-byte reads */
         {
@@ -743,7 +797,9 @@ void BMI270_Get_AngleDt(BMI270 *this, float dt)
         dt = bmi270_dt;
     }
 
-    BMI270_Get_Raw(this);
+    if (BMI270_Get_Raw(this) != 0) {
+        return;
+    }
 
     /* Convert raw to physical units */
     Ax = (float)this->AccX * bmi270_accel_scale;
@@ -833,7 +889,9 @@ void BMI270_Get_Angle_Plus(BMI270 *this)
     static float integralX = 0.0f, integralY = 0.0f, integralZ = 0.0f;
 
     /* Read raw sensor data */
-    BMI270_Get_Raw(this);
+    if (BMI270_Get_Raw(this) != 0) {
+        return;
+    }
 
     /* Convert to physical units */
     float ax = (float)this->AccX * bmi270_accel_scale;
@@ -951,6 +1009,97 @@ void BMI270_Set_Angle0(BMI270 *this)
     angle_yaw   = this->yaw;
     angle_roll  = this->roll;
     angle_pitch = this->pitch;
+}
+
+uint8_t BMI270_IsFault(void)
+{
+    return bmi270_imu_fault;
+}
+
+uint8_t BMI270_WasLastReadOk(void)
+{
+    return bmi270_last_read_ok;
+}
+
+uint32_t BMI270_GetI2cErrorCount(void)
+{
+    return bmi270_i2c_error_count;
+}
+
+int16_t BMI270_GetGyroZeroZ(void)
+{
+    return gyro_zero_z;
+}
+
+float BMI270_GetGyroScale(void)
+{
+    return bmi270_gyro_scale;
+}
+
+float BMI270_GetSampleDt(void)
+{
+    return bmi270_dt;
+}
+
+int8_t BMI270_RunGyroCal(BMI270 *this, uint16_t samples)
+{
+    int8_t result;
+
+    (void)this;
+    if (samples < 50U) {
+        samples = 50U;
+    }
+    result = BMI270_SoftCalibrate_Z(samples);
+    if (result == 0) {
+        bmi270_imu_fault = 0;
+        bmi270_gyr_z_sat_count = 0;
+        bmi270_last_read_ok = 1;
+    } else {
+        BMI270_MarkFault();
+    }
+    return result;
+}
+
+void BMI270_PrintGyroDiag(BMI270 *this)
+{
+    int16_t pre[10];
+    int16_t post[10];
+    uint8_t buf[6];
+    uint8_t i;
+    uint8_t chip_id;
+    uint8_t range;
+    float temp;
+    uint32_t scale_u;
+
+    chip_id = (uint8_t)(BMI270_READ_REG(BMI2_CHIP_ID_ADDR) & 0xFF);
+    range = (uint8_t)(BMI270_READ_REG(0x43) & BMI2_GYR_RANGE_MASK);
+    bmi270_gyr_range_reg = range;
+    temp = BMI270_GetTemp(this);
+    scale_u = (uint32_t)(bmi270_gyro_scale * 1000000.0f);
+
+    for (i = 0; i < 10U; i++) {
+        if (BMI270_READ_REG_CONTINUE_STATUS(BMI2_GYR_X_LSB_ADDR, 6, buf) != 0) {
+            bmi270_i2c_error_count++;
+            pre[i] = 0;
+            post[i] = 0;
+            BMI270_MarkFault();
+        } else {
+            pre[i] = ((int16_t)(buf[5] << 8) | buf[4]);
+            post[i] = pre[i] - gyro_zero_z;
+        }
+        BMI270_DELAY_MS(5);
+    }
+
+    USART3_printf("GDIAG ID=0x%02X RANGE=%u SCALE=%lu DT=%.1fms ZZ=%d TEMP=%.1f I2CERR=%lu IMU=%s\r\n",
+                  chip_id, bmi270_gyr_range_reg, (unsigned long)scale_u, bmi270_dt * 1000.0f,
+                  (int)gyro_zero_z, temp, (unsigned long)bmi270_i2c_error_count,
+                  bmi270_imu_fault ? "FAULT" : "OK");
+    USART3_printf("GDIAG RAWPRE %d %d %d %d %d %d %d %d %d %d\r\n",
+                  (int)pre[0], (int)pre[1], (int)pre[2], (int)pre[3], (int)pre[4],
+                  (int)pre[5], (int)pre[6], (int)pre[7], (int)pre[8], (int)pre[9]);
+    USART3_printf("GDIAG RAWPOST %d %d %d %d %d %d %d %d %d %d\r\n",
+                  (int)post[0], (int)post[1], (int)post[2], (int)post[3], (int)post[4],
+                  (int)post[5], (int)post[6], (int)post[7], (int)post[8], (int)post[9]);
 }
 
 /**
