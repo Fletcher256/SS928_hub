@@ -17,6 +17,8 @@ static volatile uint16_t MpuTaskElapsedMs = 0;
 static volatile uint8_t StraightTaskReady = 0;
 static volatile uint8_t ServoTaskReady = 0;
 
+#define IMU_MOVING_SPEED_EPS_CMS 0.01f
+
 // Main loop tasks -----------------------------------------------------------
 
 static uint8_t TakeTaskFlag(volatile uint8_t *flag)
@@ -43,13 +45,28 @@ static uint16_t TakeElapsedMs(volatile uint16_t *elapsedMs)
 	return elapsed;
 }
 
+static uint8_t IsVehicleMovingForImu(void)
+{
+	/* aveSpeed is signed: reverse motion is negative.
+	 * SpeedRank covers commanded motion before encoder speed becomes non-zero. */
+	if(SpeedRank != 0)
+	{
+		return 1U;
+	}
+	if(aveSpeed > IMU_MOVING_SPEED_EPS_CMS || aveSpeed < -IMU_MOVING_SPEED_EPS_CMS)
+	{
+		return 1U;
+	}
+	return 0U;
+}
+
 static void ServiceMpuTask(void)
 {
 	uint16_t elapsedMs = TakeElapsedMs(&MpuTaskElapsedMs);
 
 	if(elapsedMs > 0)
 	{
-		BMI270_SetVehicleMoving((aveSpeed > 0.01f) ? 1 : 0);
+		BMI270_SetVehicleMoving(IsVehicleMovingForImu());
 		BMI270_Get_AngleDt(&MM, (float)elapsedMs * 0.001f);
 		if(BMI270_WasLastReadOk() && !BMI270_IsFault())
 		{

@@ -608,6 +608,9 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
     bmi270_imu_fault = 1;
     bmi270_last_read_ok = 0;
     bmi270_gyr_z_sat_count = 0;
+    bmi270_vehicle_moving = 1;
+    stationary_cnt = 0;
+    gyro_bias_z = 0.0f;
 
     /* 1. Initialize SW-I2C */
     MyI2C_Init(&bmi270_i2cbus,
@@ -710,6 +713,7 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
      *     SW static offset already removes the constant component from raw data.
      *     EMA starts at 0 and converges upward to the residual time-varying bias. */
     gyro_bias_z = 0.0f;
+    stationary_cnt = 0;
     USART3_printf("[BMI270] Bias seed: Z=0.0 (SW offset handles static component)\r\n");
 
     /* 10. Initialize filters */
@@ -821,7 +825,7 @@ void BMI270_Get_AngleDt(BMI270 *this, float dt)
         float gz_abs = (Gz_rate >= 0.0f) ? Gz_rate : -Gz_rate;
         float gyro_mag_dps = (gx_abs + gy_abs + gz_abs) * 57.2958f;
 
-        if (gyro_mag_dps < STATIONARY_GYRO_THRESH) {
+        if (!bmi270_vehicle_moving && gyro_mag_dps < STATIONARY_GYRO_THRESH) {
             if (stationary_cnt < STATIONARY_CONFIRM_CNT) {
                 stationary_cnt++;
             }
@@ -1054,6 +1058,8 @@ int8_t BMI270_RunGyroCal(BMI270 *this, uint16_t samples)
         bmi270_imu_fault = 0;
         bmi270_gyr_z_sat_count = 0;
         bmi270_last_read_ok = 1;
+        stationary_cnt = 0;
+        gyro_bias_z = 0.0f;
     } else {
         BMI270_MarkFault();
     }
