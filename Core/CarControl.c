@@ -4,7 +4,6 @@
 #include "Motors.h"
 #include "PWMO.h"
 #include "USART.h"
-#include "LED.h"
 
 #include <math.h>
 
@@ -59,10 +58,9 @@ static ControlMode_t ControlMode = CTRL_IDLE;
 static AutoStep_t AutoStep = AUTO_IDLE;
 static uint32_t LastCommandTick = 0;
 static uint32_t ActionStartTick = 0;
-static uint32_t LastSteeringCommandTick = 0;
 static float TargetDistanceCm = 0.0f;
 
-#define ACKERMANN_CENTER_DEG      90.0f
+#define ACKERMANN_CENTER_DEG      STEERING_CENTER_DEG
 #define ACKERMANN_MIN_STEER_DEG   0.5f
 #define DEG_TO_RAD                0.01745329252f
 
@@ -129,7 +127,6 @@ void RefreshCommandWatchdog(void)
 void SetSteeringAngle(float angle)
 {
 	Angle = ClampFloat(angle, SteerMinAngle, SteerMaxAngle);
-	LastSteeringCommandTick = ControlTicks;
 	SetServoRotation(Angle);
 }
 
@@ -235,7 +232,6 @@ void SetStandbyMode(void)
 {
 	HardStopMotion();
 	rS = STANDBY;
-	SetLEDs(GPIO_Pin_14);
 }
 
 void SetManualMode(void)
@@ -427,7 +423,6 @@ uint8_t StartArcDrive(float distanceCm, float steerDeg)
 uint8_t StartAutoRoute(void)
 {
 	rS = PARKING;
-	SetLEDs(GPIO_Pin_12);
 	AutoSpeedLevel = AUTO_DEFAULT_SPEED;
 	ControlMode = CTRL_AUTO_ROUTE;
 	AutoStep = AUTO_FORWARD1;
@@ -483,26 +478,13 @@ static uint8_t UpdateYawTurn(void)
 		correction = -correction;
 	}
 
-	SetSteeringAngle(90.0f + correction);
+	SetSteeringAngle(ACKERMANN_CENTER_DEG + correction);
 	EnsureAutoSpeed();
 	return 0;
 }
 
-static void ServiceIdleServoHold(void)
-{
-	if(SpeedRank == 0 &&
-	   ServoPWM_IsAttached() &&
-	   (ControlMode == CTRL_IDLE || ControlMode == CTRL_MANUAL || ControlMode == CTRL_STRAIGHT) &&
-	   (uint32_t)(ControlTicks - LastSteeringCommandTick) > SERVO_IDLE_HOLD_MS)
-	{
-		ServoPWM_Detach();
-	}
-}
-
 void UpdateControlTask(void)
 {
-	ServiceIdleServoHold();
-
 	if((ControlMode == CTRL_MANUAL || ControlMode == CTRL_STRAIGHT) &&
 	   SpeedRank != 0 &&
 	   (uint32_t)(ControlTicks - LastCommandTick) > REMOTE_TIMEOUT_MS)
@@ -630,7 +612,6 @@ void UpdateControlTask(void)
 			{
 				SetStandbyMode();
 				rS = PARKING;
-				SetLEDs(GPIO_Pin_12);
 				if(!CarProtocol_HasActiveMotion())
 				{
 					USART3_printf("Auto route done\r\n");
@@ -672,11 +653,16 @@ void ExDirect(uint8_t Rot)
 	{
 		is_up = 1;
 		SpeedRank = ABS(SpeedRank);
+		if(rS == PARKING && ControlMode != CTRL_AUTO_ROUTE)
+		{
+			rS = STANDBY;
+		}
 	}
 	else
 	{
 		is_up = -1;
 		SpeedRank = -ABS(SpeedRank);
+		rS = PARKING;
 	}
 
 	InitAll();

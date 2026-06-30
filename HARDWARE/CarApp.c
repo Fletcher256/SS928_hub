@@ -66,7 +66,7 @@ static void ServiceStraightTask(void)
 	{
 		if(BMI270_IsFault())
 		{
-			SetSteeringAngle(90.0f);
+			SetSteeringAngle(STEERING_CENTER_DEG);
 		}
 		else
 		{
@@ -120,7 +120,7 @@ void CarApp_Run(void)
 	//OLED_Init();
 	SysTick_Init();
 	ServoPWM_Init();
-	SetSteeringAngle(90.0f);
+	SetSteeringAngle(STEERING_CENTER_DEG);
 
 	Motor_Init();
 	SetStandbyMode();

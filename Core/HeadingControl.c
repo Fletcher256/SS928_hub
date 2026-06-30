@@ -83,7 +83,7 @@ void keep_straight(void)
 	if(correction > headingPID.MaxOut) correction = headingPID.MaxOut;
 	if(correction < -headingPID.MaxOut) correction = -headingPID.MaxOut;
 
-	target_angle = 90.0f + correction;
+	target_angle = STEERING_CENTER_DEG + correction;
 	headingPID.SmoothedAngle = headingPID.SmoothAlpha * target_angle
 	                           + (1.0f - headingPID.SmoothAlpha) * headingPID.SmoothedAngle;
 

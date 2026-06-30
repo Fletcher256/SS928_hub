@@ -17,9 +17,9 @@
 #define AUTO_TURN_DEG           90.0f
 #define DISTANCE_DONE_CM        2.0f
 #define TURN_DONE_DEG           3.0f
+#define STEERING_CENTER_DEG     100.0f
 #define SERVO_SAFE_MIN_ANGLE    55.0f
 #define SERVO_SAFE_MAX_ANGLE    125.0f
-#define SERVO_IDLE_HOLD_MS      800U
 #define TURN_SERVO_MAX_OFFSET   35.0f
 #define TURN_SERVO_KP           0.75f
 #define AUTO_MAX_SPEED          6U

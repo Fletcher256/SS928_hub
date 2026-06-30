@@ -410,7 +410,7 @@ static void RestoreDefaultRuntimeConfig(void)
 	SteerMaxAngle = SERVO_SAFE_MAX_ANGLE;
 	InitAll();
 	HeadingPID_Reset(&headingPID);
-	SetSteeringAngle(90.0f);
+	SetSteeringAngle(STEERING_CENTER_DEG);
 }
 
 static uint8_t IsV2CommandName(const char *token)
@@ -430,6 +430,9 @@ static uint8_t IsV2CommandName(const char *token)
 	        strcmp(token, "TURN") == 0 ||
 	        strcmp(token, "ARC") == 0 ||
 	        strcmp(token, "AUTO") == 0 ||
+	        strcmp(token, "ST_PK") == 0 ||
+	        strcmp(token, "ST_ER") == 0 ||
+	        strcmp(token, "ST_SB") == 0 ||
 	        strcmp(token, "ZERO_ODOM") == 0 ||
 	        strcmp(token, "ZERO_YAW") == 0 ||
 	        strcmp(token, "ZERO_ALL") == 0 ||
@@ -786,6 +789,29 @@ static uint8_t HandleV2Command(char *pBuffer)
 	{
 		HandleV2Auto(seq);
 	}
+	else if(strcmp(cmd, "ST_SB") == 0)
+	{
+		SetStandbyMode();
+		LED_SetState(LED_STATE_GREEN);
+		CarProtocol_FinishActiveMotionErr("CANCELED");
+		ReplyDone(seq, "ST_SB", "");
+	}
+	else if(strcmp(cmd, "ST_PK") == 0)
+	{
+		SetStandbyMode();
+		rS = PARKING;
+		LED_SetState(LED_STATE_YELLOW);
+		CarProtocol_FinishActiveMotionErr("CANCELED");
+		ReplyDone(seq, "ST_PK", "");
+	}
+	else if(strcmp(cmd, "ST_ER") == 0)
+	{
+		SetStandbyMode();
+		rS = HITTED;
+		LED_SetState(LED_STATE_RED);
+		CarProtocol_FinishActiveMotionErr("CANCELED");
+		ReplyDone(seq, "ST_ER", "");
+	}
 	else if(strcmp(cmd, "ZERO_ODOM") == 0 || strcmp(cmd, "ZERO_YAW") == 0 || strcmp(cmd, "ZERO_ALL") == 0)
 	{
 		HandleV2Zero(cmd, seq);
@@ -963,19 +989,23 @@ static CommandResult_t HandleLegacySimpleCommand(char *pBuffer)
 	{
 		USART3_printf("Stand by!\r\n");
 		SetStandbyMode();
+		LED_SetState(LED_STATE_GREEN);
 		return CMD_HANDLED;
 	}
 	if(strcmp(command, COMMANDS[10]) == 0)
 	{
-		USART3_printf("Parking auto!\r\n");
-		return StartAutoRoute() ? CMD_HANDLED : CMD_REJECTED;
+		USART3_printf("Parking state!\r\n");
+		SetStandbyMode();
+		rS = PARKING;
+		LED_SetState(LED_STATE_YELLOW);
+		return CMD_HANDLED;
 	}
 	if(strcmp(command, COMMANDS[11]) == 0)
 	{
 		USART3_printf("Hitted!\r\n");
 		SetStandbyMode();
 		rS = HITTED;
-		SetLEDs(GPIO_Pin_13);
+		LED_SetState(LED_STATE_RED);
 		return CMD_HANDLED;
 	}
 	if(strcmp(command, COMMANDS[8]) == 0)

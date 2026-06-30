@@ -2,6 +2,8 @@
 
 #include "LED.h"
 
+LED_STATE CurrentLedState = LED_STATE_GREEN;
+
 void LED_Init()
 {
 	//APB2外设挂载的GPIO1口的RCC时钟使能端:开启。之后这个IO口就使用这个时钟信号来对IO口进行控制。
@@ -24,13 +26,11 @@ void LED_Init()
 	//初始化整个GPIO口。
 	GPIO_Init(GPIOB,&InitGPIOB);
 
-	SetLED(GPIO_Pin_12,1);
-	SetLED(GPIO_Pin_13,1);
-	SetLED(GPIO_Pin_14,0);
+	LED_SetState(LED_STATE_GREEN);
 }
 
 //设置LED亮灭状态。
-void SetLED(uint16_t GPIO_Pin,uint8_t V)
+static void SetLED(uint16_t GPIO_Pin,uint8_t V)
 {
 	if(V)
 	{
@@ -42,7 +42,7 @@ void SetLED(uint16_t GPIO_Pin,uint8_t V)
 	}
 }
 
-void SetLEDs(uint16_t GPIO_Pin)
+static void SetLEDs(uint16_t GPIO_Pin)
 {
 	SetLED(GPIO_Pin,0);
 	switch(GPIO_Pin)
@@ -67,4 +67,28 @@ void SetLEDs(uint16_t GPIO_Pin)
 		}
 	}
 	
+}
+
+void LED_SetState(LED_STATE state)
+{
+	CurrentLedState = state;
+	switch(state)
+	{
+		case LED_STATE_YELLOW:
+		{
+			SetLEDs(GPIO_Pin_12);
+			break;
+		}
+		case LED_STATE_RED:
+		{
+			SetLEDs(GPIO_Pin_13);
+			break;
+		}
+		case LED_STATE_GREEN:
+		default:
+		{
+			SetLEDs(GPIO_Pin_14);
+			break;
+		}
+	}
 }

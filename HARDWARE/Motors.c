@@ -2,6 +2,8 @@
 
 #include "Motors.h"
 
+#include "CarControl.h"
+
 #include "Timers.h"
 
 #include <math.h>
@@ -134,7 +136,7 @@ HeadingPID_t headingPID =
 	.Integral      = 0.0f,
 	.LastError     = 0.0f,
 	.dV            = 0.0f,
-	.SmoothedAngle = 90.0f,
+	.SmoothedAngle = STEERING_CENTER_DEG,
 	.FirstRun      = 1,
 };
 
@@ -596,7 +598,7 @@ void HeadingPID_Init(HeadingPID_t *p)
 	p->Integral      = 0.0f;
 	p->LastError     = 0.0f;
 	p->dV            = 0.0f;
-	p->SmoothedAngle = 90.0f;
+	p->SmoothedAngle = STEERING_CENTER_DEG;
 	p->FirstRun      = 1;
 }
 
@@ -606,7 +608,7 @@ void HeadingPID_Reset(HeadingPID_t *p)
 	p->Integral         = 0.0f;
 	p->LastError        = 0.0f;
 	p->dV               = 0.0f;
-	p->SmoothedAngle    = 90.0f;
+	p->SmoothedAngle    = STEERING_CENTER_DEG;
 	p->FirstRun         = 1;
 	p->CrossTrackEnable = 1;
 }

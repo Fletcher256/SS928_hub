@@ -10,8 +10,8 @@
 #define SERVO_MAX_PULSE_US 2000U
 #define SERVO_UPDATE_DEADBAND_DEG 0.8f
 
-static uint16_t ServoLastPulseUs = 1500U;
-static float ServoLastAngle = 90.0f;
+static uint16_t ServoLastPulseUs = 1555U;
+static float ServoLastAngle = 100.0f;
 static uint8_t ServoPWMInitialized = 0;
 static uint8_t ServoPWMAttached = 1;
 static uint16_t ServoRecoverCount = 0;
@@ -72,7 +72,7 @@ uint8_t ServoPWM_IsHealthy(void)
 		{
 			return 0;
 		}
-		if(pa1Mode != 0x03U)
+		if(pa1Mode != 0x08U)
 		{
 			return 0;
 		}
@@ -132,9 +132,8 @@ void ServoPWM_Detach(void)
 
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
 	GPIO_ResetBits(GPIOA, GPIO_Pin_1);
-	//浮空直接锁位了对于这个舵机,这样也够了其实?
-	//对于实际的地面可能不够用但也没办法暂时用着先看看了。
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+	/* Keep the detached servo signal at a defined weak-low level. */
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPD;
 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1;
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
 	GPIO_Init(GPIOA, &GPIO_InitStructure);

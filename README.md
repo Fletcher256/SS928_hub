@@ -43,7 +43,7 @@ Legacy commands are still supported:
 - `RT_TOx`: set steering using the legacy mapping `servo = 180 - x`.
 - `ST_KP/ST_KI/ST_KD`: tune heading PID.
 - `ST_SB`: standby and stop.
-- `ST_PK`: start the default autonomous route.
+- `ST_PK`: enter parking run state without starting motion.
 - `ST_ER`: emergency/error stop.
 
 New remote/autonomous commands:
