@@ -63,6 +63,7 @@ float GetReportedYaw(void);
 const char *ControlModeName(void);
 const char *RunStateName(void);
 
+void SetRunState(RS state);
 void RefreshCommandWatchdog(void);
 void SetSteeringAngle(float angle);
 void SetStandbyMode(void);

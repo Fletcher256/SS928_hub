@@ -76,6 +76,9 @@ virtualFolder:
     - path: HARDWARE/BMI270/bmi270_config.c
     - path: HARDWARE/key.c
     - path: HARDWARE/key.h
+    - path: HARDWARE/claude_reverse.c
+    - path: HARDWARE/OLED_StateAnim.c
+    - path: HARDWARE/OLED_StateAnim.h
   folders:
     - name: libs
       files:

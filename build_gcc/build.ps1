@@ -74,6 +74,8 @@ $Sources = @(
   'Core/HeadingControl.c',
   'Core/Timers.c',
   'HARDWARE/PWMO.c',
+  'HARDWARE/OLED.c',
+  'HARDWARE/OLED_StateAnim.c',
   'HARDWARE/USART.c',
   'HARDWARE/Keys.c',
   'HARDWARE/key.c',

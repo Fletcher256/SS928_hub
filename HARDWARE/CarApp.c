@@ -5,7 +5,8 @@
 #include "Timers.h"
 #include "Motors.h"
 #include "PWMO.h"
-//#include "OLED.h"
+#include "OLED.h"
+#include "OLED_StateAnim.h"
 #include "USART.h"
 #include "BMI270/bmi270_driver.h"
 #include "_MyI2C_.h"
@@ -114,6 +115,16 @@ void CarApp_Run(void)
 	LED_Init();
 	USART3_Init();
 	DataCaptureKey_Init();
+	OLED_Init();
+	if(OLED_GetAddress() != 0)
+	{
+		USART3_printf("[OLED] Found at 0x%02X on PA4/PA5\r\n", OLED_GetAddress());
+	}
+	else
+	{
+		USART3_printf("[OLED] No ACK on PA4/PA5, tried 0x3C/0x3D\r\n");
+	}
+	OLED_StateAnim_Init(rS);
 	/* I2C diag: scan + try reading Chip ID directly */
 	{
 		i2cbus_struct scan_bus;
@@ -138,7 +149,7 @@ void CarApp_Run(void)
 
 	//寮€濮嬩娇鑳界粰0,涓嶈兘婊¤冻涓?鏃堕棿瓒冲闀垮洜姝ゆ棤娉曡緭鍑恒€?
 	//鎵€浠T4950涔熼渶瑕佷竴涓垵濮嬪寲,灏辨槸涓婄數鍏堟妸瀹冨敜閱掋€傘€傘€?
-	//OLED_Init();
+
 	SysTick_Init();
 	ServoPWM_Init();
 	SetSteeringAngle(STEERING_CENTER_DEG);
@@ -151,6 +162,7 @@ void CarApp_Run(void)
 
 	//鏍￠獙MPU6050鏄惁鎴愬姛璇诲埌鏁版嵁銆?
 	USART3_printf("Everything is ready!\r\n");
+
 	while(1)
 	{
 		//mpu_dmp_get_data(&MM.pitch,&MM.roll,&MM.yaw);
@@ -163,6 +175,7 @@ void CarApp_Run(void)
 		ServiceMpuTask();
 		ServiceStraightTask();
 		ServiceServoTask();
+		OLED_StateAnim_Service(ControlTicks);
 		UpdateControlTask();
 		DataCaptureKey_Service();
 

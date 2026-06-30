@@ -799,7 +799,7 @@ static uint8_t HandleV2Command(char *pBuffer)
 	else if(strcmp(cmd, "ST_PK") == 0)
 	{
 		SetStandbyMode();
-		rS = PARKING;
+		SetRunState(PARKING);
 		LED_SetState(LED_STATE_YELLOW);
 		CarProtocol_FinishActiveMotionErr("CANCELED");
 		ReplyDone(seq, "ST_PK", "");
@@ -807,7 +807,7 @@ static uint8_t HandleV2Command(char *pBuffer)
 	else if(strcmp(cmd, "ST_ER") == 0)
 	{
 		SetStandbyMode();
-		rS = HITTED;
+		SetRunState(HITTED);
 		LED_SetState(LED_STATE_RED);
 		CarProtocol_FinishActiveMotionErr("CANCELED");
 		ReplyDone(seq, "ST_ER", "");
@@ -996,7 +996,7 @@ static CommandResult_t HandleLegacySimpleCommand(char *pBuffer)
 	{
 		USART3_printf("Parking state!\r\n");
 		SetStandbyMode();
-		rS = PARKING;
+		SetRunState(PARKING);
 		LED_SetState(LED_STATE_YELLOW);
 		return CMD_HANDLED;
 	}
@@ -1004,7 +1004,7 @@ static CommandResult_t HandleLegacySimpleCommand(char *pBuffer)
 	{
 		USART3_printf("Hitted!\r\n");
 		SetStandbyMode();
-		rS = HITTED;
+		SetRunState(HITTED);
 		LED_SetState(LED_STATE_RED);
 		return CMD_HANDLED;
 	}
@@ -1039,7 +1039,7 @@ static CommandResult_t HandleLegacySimpleCommand(char *pBuffer)
 	{
 		SetManualMode();
 		USART3_printf("SpeedRank stop!\r\n");
-		SpeedRank = 0;
+		SetSpeedRank(0);
 		rSetSpeed(0);
 		lSetSpeed(0);
 		return CMD_HANDLED;

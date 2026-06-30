@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>.\LIBS;.\START;.\USER;.\Core;.\HARDWARE</IncludePath>
+              <IncludePath>.;.\LIBS;.\START;.\USER;.\Core;.\HARDWARE</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -764,6 +764,26 @@
               <FileName>PWMO.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\HARDWARE\PWMO.c</FilePath>
+            </File>
+            <File>
+              <FileName>OLED.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\HARDWARE\OLED.c</FilePath>
+            </File>
+            <File>
+              <FileName>OLED.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\HARDWARE\OLED.h</FilePath>
+            </File>
+            <File>
+              <FileName>OLED_StateAnim.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\HARDWARE\OLED_StateAnim.c</FilePath>
+            </File>
+            <File>
+              <FileName>OLED_StateAnim.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\HARDWARE\OLED_StateAnim.h</FilePath>
             </File>
             <File>
               <FileName>USART.c</FileName>

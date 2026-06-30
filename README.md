@@ -64,3 +64,22 @@ New remote/autonomous commands:
 - Distance actions stop after 30 seconds if the target is not reached.
 - Yaw turn actions stop after 8 seconds if the target is not reached.
 - The current hardware set does not include obstacle detection, so autonomous mode is odometry/IMU based only.
+
+## OLED Action Images
+
+The OLED is treated as a 128x64 monochrome status display. Action-level visuals are dispatched through
+`OLED_StateAnim_ShowAction()` and rendered only when the action changes, so the I2C display update does not
+run continuously in the control loop.
+
+Recommended LVGL Image Converter settings for custom pictures:
+
+- Size: `128 x 64`.
+- Color: 1-bit monochrome.
+- Use `OLED_DrawBitmap128x64()` when the array is already in SSD1306 page order: 8 pages x 128 bytes.
+- Use `OLED_DrawMonoBitmap128x64()` when the array is row-major 1-bit pixels: 64 rows x 16 bytes.
+- Keep the final pixel payload at `1024` bytes per full-screen image.
+
+This firmware does not link the full LVGL library. The small `lvgl.h` / `lvgl/lvgl.h`
+compatibility headers only provide the image descriptor types and constants commonly emitted
+by LVGL Image Converter. They are for bitmap resources only, not LVGL widgets, timers, styles,
+or display drivers.

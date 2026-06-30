@@ -2,6 +2,7 @@
 #include "CarControl.h"
 #include "CarProtocol.h"
 #include "Motors.h"
+#include "OLED_StateAnim.h"
 #include "PWMO.h"
 #include "USART.h"
 
@@ -119,6 +120,19 @@ const char *RunStateName(void)
 	}
 }
 
+void SetRunState(RS state)
+{
+	RS previousState = rS;
+
+	if(previousState == state)
+	{
+		return;
+	}
+
+	rS = state;
+	OLED_StateAnim_OnTransition(previousState, state, ControlTicks);
+}
+
 void RefreshCommandWatchdog(void)
 {
 	LastCommandTick = ControlTicks;
@@ -178,6 +192,16 @@ static void HardStopMotion(void)
 	ControlMode = CTRL_IDLE;
 }
 
+static OLED_ActionVisual_t MotionActionFromDirection(void)
+{
+	return is_up >= 0 ? OLED_ACTION_FORWARD : OLED_ACTION_REVERSE;
+}
+
+static OLED_ActionVisual_t ArcActionFromSteering(float steerAngle)
+{
+	return steerAngle >= ACKERMANN_CENTER_DEG ? OLED_ACTION_ARC_LEFT : OLED_ACTION_ARC_RIGHT;
+}
+
 void PrintTelemetry(void)
 {
 	Odometry_t snapshot;
@@ -231,7 +255,8 @@ void PrintLegacyTelemetry(void)
 void SetStandbyMode(void)
 {
 	HardStopMotion();
-	rS = STANDBY;
+	SetRunState(STANDBY);
+	OLED_StateAnim_ShowAction(OLED_ACTION_IDLE, ControlTicks);
 }
 
 void SetManualMode(void)
@@ -280,6 +305,7 @@ void PrepareStraightHold(void)
 	Set_Straight();
 	ControlMode = CTRL_STRAIGHT;
 	AutoStep = AUTO_IDLE;
+	OLED_StateAnim_ShowAction(OLED_ACTION_STRAIGHT, ControlTicks);
 }
 
 static uint8_t PrepareDistanceDrive(float distanceCm)
@@ -310,6 +336,7 @@ static uint8_t PrepareDistanceDrive(float distanceCm)
 	Odometry_Reset();
 	ActionStartTick = ControlTicks;
 	EnsureAutoSpeed();
+	OLED_StateAnim_ShowAction(MotionActionFromDirection(), ControlTicks);
 	return 1;
 }
 
@@ -352,6 +379,8 @@ static uint8_t PrepareYawTurn(float relativeYawDeg)
 	Motor_ResetSpeedScale();
 	ActionStartTick = ControlTicks;
 	EnsureAutoSpeed();
+	OLED_StateAnim_ShowAction(relativeYawDeg > 0.0f ? OLED_ACTION_TURN_LEFT : OLED_ACTION_TURN_RIGHT,
+	                          ControlTicks);
 	return 1;
 }
 
@@ -413,6 +442,7 @@ uint8_t StartArcDrive(float distanceCm, float steerDeg)
 	EnsureAutoSpeed();
 	ControlMode = CTRL_ARC;
 	AutoStep = AUTO_IDLE;
+	OLED_StateAnim_ShowAction(ArcActionFromSteering(Angle), ControlTicks);
 	if(!CarProtocol_IsQuiet())
 	{
 		USART3_printf("Arc drive %.1f cm steer %.1f deg\r\n", TargetDistanceCm, Angle);
@@ -422,7 +452,7 @@ uint8_t StartArcDrive(float distanceCm, float steerDeg)
 
 uint8_t StartAutoRoute(void)
 {
-	rS = PARKING;
+	SetRunState(PARKING);
 	AutoSpeedLevel = AUTO_DEFAULT_SPEED;
 	ControlMode = CTRL_AUTO_ROUTE;
 	AutoStep = AUTO_FORWARD1;
@@ -611,7 +641,7 @@ void UpdateControlTask(void)
 			if(UpdateDistanceDrive())
 			{
 				SetStandbyMode();
-				rS = PARKING;
+				SetRunState(PARKING);
 				if(!CarProtocol_HasActiveMotion())
 				{
 					USART3_printf("Auto route done\r\n");
@@ -632,6 +662,7 @@ void SpeedAcc(void)
 		if(rank > 720) rank = 720;
 		SpeedRank = ABSTRACT(is_up) * rank;
 		SetSteeringAngle(Angle);
+		OLED_StateAnim_ShowAction(MotionActionFromDirection(), ControlTicks);
 	}
 }
 
@@ -644,6 +675,7 @@ void SpeedSlowDown(void)
 		rank -= SPEEDSTEP;
 		if(rank < 0) rank = 0;
 		SpeedRank = ABSTRACT(is_up) * rank;
+		OLED_StateAnim_ShowAction(rank == 0 ? OLED_ACTION_STOP : MotionActionFromDirection(), ControlTicks);
 	}
 }
 
@@ -655,14 +687,14 @@ void ExDirect(uint8_t Rot)
 		SpeedRank = ABS(SpeedRank);
 		if(rS == PARKING && ControlMode != CTRL_AUTO_ROUTE)
 		{
-			rS = STANDBY;
+			SetRunState(STANDBY);
 		}
 	}
 	else
 	{
 		is_up = -1;
 		SpeedRank = -ABS(SpeedRank);
-		rS = PARKING;
+		SetRunState(PARKING);
 	}
 
 	InitAll();
@@ -674,6 +706,7 @@ void ExDirect(uint8_t Rot)
 		headingPID.CrossTrackEnable = 1;
 	}
 	is_Switch = 1;
+	OLED_StateAnim_ShowAction(MotionActionFromDirection(), ControlTicks);
 }
 
 void SetSpeedRank(int8_t level)
@@ -693,6 +726,7 @@ void SetSpeedRank(int8_t level)
 		{
 			SetSteeringAngle(Angle);
 		}
+		OLED_StateAnim_ShowAction(level == 0 ? OLED_ACTION_STOP : MotionActionFromDirection(), ControlTicks);
 	}
 }
 
