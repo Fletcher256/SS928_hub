@@ -66,14 +66,18 @@ static void ServiceMpuTask(void)
 
 	if(elapsedMs > 0)
 	{
+		uint8_t imuOk;
+
 		BMI270_SetVehicleMoving(IsVehicleMovingForImu());
 		BMI270_Get_AngleDt(&MM, (float)elapsedMs * 0.001f);
-		if(BMI270_WasLastReadOk() && !BMI270_IsFault())
+		imuOk = (BMI270_WasLastReadOk() && !BMI270_IsFault()) ? 1U : 0U;
+		if(imuOk)
 		{
 			New_Pitch = KalmanFilter_Update(&Kal_Pitch,MM.pitch);
 			New_Roll = KalmanFilter_Update(&Kal_Roll,MM.roll);
 			New_Yaw = KalmanFilter_Update(&Kal_Yaw,MM.yaw);
 		}
+		Odometry_SetImuYaw(New_Yaw, imuOk);
 	}
 }
 

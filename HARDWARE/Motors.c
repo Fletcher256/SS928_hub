@@ -20,6 +20,9 @@
 #define WHEEL_C 21.04867
 
 #define ODOM_PI 3.1415926f
+#define ODOM_DEG_TO_RAD 0.01745329252f
+#define ODOM_SAMPLE_DT_SEC 0.02f
+#define ODOM_IMU_MAX_DELTA_DEG 45.0f
 
 int16_t SpeedRank = 0;
 
@@ -150,19 +153,47 @@ static float RightSpeedScale = 1.0f;
 // ========== 里程计 ==========
 Odometry_t odom = {0};
 
+static float OdomImuYawDeg = 0.0f;
+static uint8_t OdomImuOk = 0;
+static float OdomLastImuYawDeg = 0.0f;
+static uint8_t OdomImuYawValid = 0;
+
+static float OdometryAbsFloat(float value)
+{
+	return value < 0.0f ? -value : value;
+}
+
+static float OdometryWrapDeg(float value)
+{
+	while(value > 180.0f) value -= 360.0f;
+	while(value < -180.0f) value += 360.0f;
+	return value;
+}
+
+static float OdometryWrapRad(float value)
+{
+	while(value > ODOM_PI) value -= 2.0f * ODOM_PI;
+	while(value < -ODOM_PI) value += 2.0f * ODOM_PI;
+	return value;
+}
+
 void Odometry_Reset(void)
 {
+	__disable_irq();
 	odom.x = 0.0f;
 	odom.y = 0.0f;
 	odom.theta = 0.0f;
 	odom.distance = 0.0f;
+	OdomLastImuYawDeg = OdomImuYawDeg;
+	OdomImuYawValid = OdomImuOk ? 1U : 0U;
+	__enable_irq();
 }
 
 /*
  * 里程计更新(每20ms调用一次,与速度PID同步)
  * left_speed_cms:  左轮速度(cm/s), 正值=前进
  * right_speed_cms: 右轮速度(cm/s), 正值=前进
- * 基于两后轮差分推算航向变化和位移,不受IMU漂移影响
+ * 位移来自编码器,航向优先使用IMU yaw增量; IMU不可用时回退两后轮差分
  */
 void Odometry_GetSnapshot(Odometry_t *snapshot)
 {
@@ -176,13 +207,59 @@ void Odometry_GetSnapshot(Odometry_t *snapshot)
 	__enable_irq();
 }
 
+void Odometry_SetImuYaw(float yaw_deg, uint8_t imu_ok)
+{
+	__disable_irq();
+	OdomImuYawDeg = yaw_deg;
+	OdomImuOk = imu_ok ? 1U : 0U;
+	__enable_irq();
+}
+
+static uint8_t Odometry_GetImuDelta(float *dtheta)
+{
+	float imu_yaw_deg;
+	float dyaw_deg;
+
+	if(dtheta == 0)
+	{
+		return 0U;
+	}
+	if(!OdomImuOk)
+	{
+		OdomImuYawValid = 0U;
+		return 0U;
+	}
+
+	imu_yaw_deg = OdomImuYawDeg;
+	if(!OdomImuYawValid)
+	{
+		OdomLastImuYawDeg = imu_yaw_deg;
+		OdomImuYawValid = 1U;
+		return 0U;
+	}
+
+	dyaw_deg = OdometryWrapDeg(imu_yaw_deg - OdomLastImuYawDeg);
+	OdomLastImuYawDeg = imu_yaw_deg;
+
+	/* Reject impossible yaw jumps and fall back to wheel differential for this
+	 * frame. Reported yaw and odometry theta use the same sign convention on
+	 * this chassis, preserving existing STAT X/Y signs. */
+	if(OdometryAbsFloat(dyaw_deg) > ODOM_IMU_MAX_DELTA_DEG)
+	{
+		return 0U;
+	}
+
+	*dtheta = dyaw_deg * ODOM_DEG_TO_RAD;
+	return 1U;
+}
+
 void Odometry_Update(float left_speed_cms, float right_speed_cms)
 {
-	float dl = left_speed_cms * 0.02f;   // 20ms内左轮行驶距离(cm)
-	float dr = right_speed_cms * 0.02f;  // 20ms内右轮行驶距离(cm)
+	float dl = left_speed_cms * ODOM_SAMPLE_DT_SEC;   // 20ms内左轮行驶距离(cm)
+	float dr = right_speed_cms * ODOM_SAMPLE_DT_SEC;  // 20ms内右轮行驶距离(cm)
 	float dc = (dl + dr) * 0.5f;          // 中心点行驶距离
 
-	// 编码器差分推算航向变化: 右轮多走 → 左转 → 航向角增加
+	// 编码器差分推算航向变化: IMU不可用时作为回退
 	float raw_dtheta = (dr - dl) / WHEEL_TRACK_CM;
 
 	// 方向修正: 后退时轮速为负,差分符号需翻转
@@ -195,14 +272,23 @@ void Odometry_Update(float left_speed_cms, float right_speed_cms)
 		dtheta = -raw_dtheta;
 	}
 
+	/* Fusion policy: encoder distance + IMU yaw delta.
+	 * If IMU is faulted/stale/rejected, keep the original encoder-only path. */
+	{
+		float imu_dtheta;
+		if(Odometry_GetImuDelta(&imu_dtheta))
+		{
+			dtheta = imu_dtheta;
+		}
+	}
+
 	// 中值积分提高精度
 	float mid_theta = odom.theta + dtheta * 0.5f;
 	// x is lateral (right positive), y is forward.
 	odom.x -= dc * sinf(mid_theta);
 	odom.y += dc * cosf(mid_theta);
 	odom.theta += dtheta;
-	while(odom.theta > ODOM_PI) odom.theta -= 2.0f * ODOM_PI;
-	while(odom.theta < -ODOM_PI) odom.theta += 2.0f * ODOM_PI;
+	odom.theta = OdometryWrapRad(odom.theta);
 	odom.distance += fabsf(dc);
 }
 

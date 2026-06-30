@@ -28,7 +28,7 @@
 typedef struct {
 	float x;          // X坐标(cm), 右方为正
 	float y;          // Y坐标(cm), 前方为正
-	float theta;      // 航向角(rad), 基于编码器差分,左转为正
+	float theta;      // 航向角(rad),优先使用IMU yaw增量,IMU故障时回退编码器差分
 	float distance;   // 累计行驶里程(cm)
 } Odometry_t;
 
@@ -151,6 +151,8 @@ void HeadingPID_Reset(HeadingPID_t *p);    // 复位航向PID内部状态 (保�
 void Odometry_Reset(void);
 
 void Odometry_GetSnapshot(Odometry_t *snapshot);
+
+void Odometry_SetImuYaw(float yaw_deg, uint8_t imu_ok);
 
 void Odometry_Update(float left_speed_cms, float right_speed_cms);
 
