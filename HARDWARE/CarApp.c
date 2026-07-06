@@ -132,7 +132,7 @@ void CarApp_Run(void)
 		uint16_t chip_id_raw;
 
 		/* Try with longer delay (10 instead of 5) */
-		MyI2C_Init(&scan_bus, GPIOB, GPIO_Pin_0, GPIOB, GPIO_Pin_1, 0x69, 10);
+		MyI2C_Init(&scan_bus, GPIOB, GPIO_Pin_1, GPIOB, GPIO_Pin_0, 0x69, 10);
 		addr = MYI2C_Add_Scan(&scan_bus);
 		USART3_printf("[SCAN] I2C device at 0x%02X\r\n", addr);
 
@@ -141,7 +141,7 @@ void CarApp_Run(void)
 		USART3_printf("[DIAG] Raw Chip ID read: 0x%04X → 0x%02X\r\n", chip_id_raw, (uint8_t)(chip_id_raw & 0xFF));
 	}
 	//aMPU6050_Init();
-	BMI270_init(GPIOB, GPIO_Pin_0, GPIO_Pin_1);
+	BMI270_init(GPIOB, GPIO_Pin_1, GPIO_Pin_0);
 	//涔熶篃璁告垜浠渶瑕佸MPU6050杩涜涓€涓潤鎬佹牎鍑嗐€?
 	//MPU6050_Calibration();
 	//mpu_dmp_init(GPIOB,GPIO_Pin_1,GPIO_Pin_0);

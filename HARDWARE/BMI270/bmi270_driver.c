@@ -44,7 +44,8 @@ static i2cbus_struct bmi270_i2cbus;
     MYI2C_Read_Reg_Continue_Status(&bmi270_i2cbus, reg, len, buf)
 
 /* I2C address (SDO=GND → 0x68, SDO=VDDIO → 0x69) */
-#define BMI270_I2C_ADDR  0x69
+#define BMI270_I2C_ADDR_DEFAULT  0x69
+#define BMI270_I2C_ADDR_ALT      0x68
 
 /*===========================================================================*/
 /*! @name     Bosch SensorAPI Callback Layer                                  */
@@ -499,7 +500,9 @@ static int8_t BMI270_SoftCalibrate_Z(uint16_t calibration_samples)
 static int8_t BMI270_Get_Raw(BMI270 *this)
 {
     static uint8_t temp_buffer[12];
-    int16_t raw_gyro_z;
+    int32_t acc_x, acc_y, acc_z;
+    int32_t gyro_x, gyro_y, gyro_z;
+    int32_t raw_gyro_z;
 
     if (BMI270_READ_REG_CONTINUE_STATUS(BMI2_ACC_X_LSB_ADDR, 12, temp_buffer) != 0) {
         bmi270_i2c_error_count++;
@@ -511,15 +514,15 @@ static int8_t BMI270_Get_Raw(BMI270 *this)
     bmi270_last_read_ok = 1;
 
     /* Parse 12-byte burst — BMI270 LSB first, MSB second (little-endian) */
-    this->AccX  = ((int16_t)(temp_buffer[1] << 8) | temp_buffer[0]);
-    this->AccY  = ((int16_t)(temp_buffer[3] << 8) | temp_buffer[2]);
-    this->AccZ  = ((int16_t)(temp_buffer[5] << 8) | temp_buffer[4]);
-    this->GyroX = ((int16_t)(temp_buffer[7] << 8) | temp_buffer[6]);
-    this->GyroY = ((int16_t)(temp_buffer[9] << 8) | temp_buffer[8]);
-    this->GyroZ = ((int16_t)(temp_buffer[11] << 8) | temp_buffer[10]);
-    raw_gyro_z = this->GyroZ;
+    acc_x  = (int16_t)(((uint16_t)temp_buffer[1] << 8) | temp_buffer[0]);
+    acc_y  = (int16_t)(((uint16_t)temp_buffer[3] << 8) | temp_buffer[2]);
+    acc_z  = (int16_t)(((uint16_t)temp_buffer[5] << 8) | temp_buffer[4]);
+    gyro_x = (int16_t)(((uint16_t)temp_buffer[7] << 8) | temp_buffer[6]);
+    gyro_y = (int16_t)(((uint16_t)temp_buffer[9] << 8) | temp_buffer[8]);
+    gyro_z = (int16_t)(((uint16_t)temp_buffer[11] << 8) | temp_buffer[10]);
+    raw_gyro_z = gyro_z;
 
-    if (abs(raw_gyro_z) >= 32000) {
+    if (raw_gyro_z >= 32000 || raw_gyro_z <= -32000) {
         if (bmi270_gyr_z_sat_count < 255U) {
             bmi270_gyr_z_sat_count++;
         }
@@ -531,9 +534,26 @@ static int8_t BMI270_Get_Raw(BMI270 *this)
     }
 
     /* Apply software gyro calibration */
-    this->GyroX = this->GyroX - gyro_zero_x;
-    this->GyroY = this->GyroY - gyro_zero_y;
-    this->GyroZ = this->GyroZ - gyro_zero_z;
+    gyro_x -= gyro_zero_x;
+    gyro_y -= gyro_zero_y;
+    gyro_z -= gyro_zero_z;
+
+    /* Map the new BMI270 Y axis to the old IMU / vehicle coordinate frame.
+     * Keep Z unchanged so yaw remains CCW-positive. */
+    acc_y = -acc_y;
+    gyro_y = -gyro_y;
+
+    if (acc_y > 32767) acc_y = 32767;
+    if (acc_y < -32768) acc_y = -32768;
+    if (gyro_y > 32767) gyro_y = 32767;
+    if (gyro_y < -32768) gyro_y = -32768;
+
+    this->AccX  = (int16_t)acc_x;
+    this->AccY  = (int16_t)acc_y;
+    this->AccZ  = (int16_t)acc_z;
+    this->GyroX = (int16_t)gyro_x;
+    this->GyroY = (int16_t)gyro_y;
+    this->GyroZ = (int16_t)gyro_z;
 
 #if BMI270_USE_Filter
     /* Apply PT1 filters */
@@ -602,6 +622,8 @@ static inline float invSqrt(float x)
 void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
 {
     uint8_t chip_id;
+    uint8_t detected_addr = 0;
+    uint8_t addr_candidates[2] = { BMI270_I2C_ADDR_DEFAULT, BMI270_I2C_ADDR_ALT };
     int8_t  rslt;
     int     i;
 
@@ -612,12 +634,31 @@ void BMI270_init(GPIO_TypeDef *GPIOx, uint16_t SCl, uint16_t SDA)
     stationary_cnt = 0;
     gyro_bias_z = 0.0f;
 
-    /* 1. Initialize SW-I2C */
-    MyI2C_Init(&bmi270_i2cbus,
-               GPIOx, SCl,
-               GPIOx, SDA,
-               BMI270_I2C_ADDR,
-               5);  /* delay_time = 5 (standard mode ~100kHz) */
+    /* 1. Initialize SW-I2C and detect address.
+     * Existing modules used 0x69, while Bosch default is 0x68 when SDO/SA0 is GND. */
+    for (i = 0; i < 2; i++) {
+        MyI2C_Init(&bmi270_i2cbus,
+                   GPIOx, SCl,
+                   GPIOx, SDA,
+                   addr_candidates[i],
+                   5);  /* delay_time = 5 (standard mode ~100kHz) */
+
+        chip_id = (uint8_t)(BMI270_READ_REG(BMI2_CHIP_ID_ADDR) & 0xFF);
+        USART3_printf("[BMI270] Probe addr 0x%02X: chip ID 0x%02X\r\n",
+                      addr_candidates[i], chip_id);
+        if (chip_id == BMI270_CHIP_ID) {
+            detected_addr = addr_candidates[i];
+            break;
+        }
+    }
+
+    if (detected_addr == 0) {
+        USART3_printf("[BMI270] FAIL: no BMI270 at 0x%02X/0x%02X\r\n",
+                      BMI270_I2C_ADDR_DEFAULT, BMI270_I2C_ADDR_ALT);
+        BMI270_MarkFault();
+        return;
+    }
+    USART3_printf("[BMI270] Using I2C addr 0x%02X\r\n", detected_addr);
 
     /* 2. Soft reset */
     bmi2_soft_reset();
