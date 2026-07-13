@@ -57,6 +57,23 @@ New remote/autonomous commands:
 - `RC_DSTx`: drive straight for `x` cm. Negative values drive backward.
 - `RC_YAWx`: turn by `x` degrees relative to current yaw. Positive is left.
 - `RC_AUTO` or `AU_RUN`: run the default autonomous route: forward 100 cm, left 90 degrees, forward 60 cm, stop.
+- `LED_BLINK ON|OFF`: flash or restore the currently selected status LED. A state
+  transition (`ST_SB`, `ST_PK`, or `ST_ER`) changes the blinking colour without
+  disabling the flash mode.
+
+## Physical button protocol
+
+The active-low PA3 button is debounced and classified on release:
+
+- shorter than 2000 ms: `CTR_PK SHORT DUR_MS=<n>` — board launcher starts
+  parking while idle; the same token safely stops an active parking controller;
+- 2000 ms or longer: `CTR_REC LONG DUR_MS=<n>` — board launcher/controller
+  toggles board-native H264 recording. The board enables `LED_BLINK ON` only
+  after the H264 file and a fresh YOLO detection are both present.
+
+The LED's base state remains authoritative: recording-only flashes green;
+parking (`ST_PK`) changes it to flashing yellow; stopping recording restores the
+current state to steady output.
 
 ## Safety Behavior
 

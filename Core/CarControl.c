@@ -44,6 +44,7 @@ typedef enum ControlMode
 	CTRL_DISTANCE,
 	CTRL_TURN_YAW,
 	CTRL_ARC,
+	CTRL_CURVE,
 	CTRL_AUTO_ROUTE
 } ControlMode_t;
 
@@ -60,6 +61,9 @@ static AutoStep_t AutoStep = AUTO_IDLE;
 static uint32_t LastCommandTick = 0;
 static uint32_t ActionStartTick = 0;
 static float TargetDistanceCm = 0.0f;
+static float CurveStartYawDeg = 0.0f;
+static float CurveTargetKDegPerCm = 0.0f;
+static float CurveFeedForwardSteerDeg = 0.0f;
 
 #define ACKERMANN_CENTER_DEG      STEERING_CENTER_DEG
 #define ACKERMANN_MIN_STEER_DEG   0.5f
@@ -104,6 +108,7 @@ const char *ControlModeName(void)
 	case CTRL_DISTANCE: return "DISTANCE";
 	case CTRL_TURN_YAW: return "TURN";
 	case CTRL_ARC: return "ARC";
+	case CTRL_CURVE: return "CURVE";
 	case CTRL_AUTO_ROUTE: return "AUTO";
 	default: return "UNKNOWN";
 	}
@@ -202,6 +207,12 @@ static OLED_ActionVisual_t ArcActionFromSteering(float steerAngle)
 	return steerAngle >= ACKERMANN_CENTER_DEG ? OLED_ACTION_ARC_LEFT : OLED_ACTION_ARC_RIGHT;
 }
 
+static float CurveFeedForwardSteerFromK(float targetKDegPerCm)
+{
+	return ClampFloat(ACKERMANN_WHEEL_BASE_CM * targetKDegPerCm,
+	                  -TURN_SERVO_MAX_OFFSET, TURN_SERVO_MAX_OFFSET);
+}
+
 void PrintTelemetry(void)
 {
 	Odometry_t snapshot;
@@ -285,7 +296,8 @@ uint8_t IsAutoMotionMode(void)
 	return (ControlMode == CTRL_AUTO_ROUTE ||
 	        ControlMode == CTRL_DISTANCE ||
 	        ControlMode == CTRL_TURN_YAW ||
-	        ControlMode == CTRL_ARC);
+	        ControlMode == CTRL_ARC ||
+	        ControlMode == CTRL_CURVE);
 }
 
 static void EnsureAutoSpeed(void)
@@ -450,6 +462,55 @@ uint8_t StartArcDrive(float distanceCm, float steerDeg)
 	return 1;
 }
 
+uint8_t StartCurveDrive(float distanceCm, float targetKDegPerCm)
+{
+	float directionScale;
+
+	if(AbsFloat(distanceCm) < 1.0f ||
+	   targetKDegPerCm != targetKDegPerCm ||
+	   BMI270_IsFault())
+	{
+		return 0;
+	}
+
+	if(distanceCm < 0.0f)
+	{
+		if(is_up == 1)
+		{
+			ExDirect(0);
+		}
+		TargetDistanceCm = -distanceCm;
+	}
+	else
+	{
+		if(is_up == -1)
+		{
+			ExDirect(1);
+		}
+		TargetDistanceCm = distanceCm;
+	}
+
+	is_straight = 0;
+	is_turn = 0;
+	headingPID.CrossTrackEnable = 0;
+	Motor_ResetSpeedScale();
+	CurveStartYawDeg = GetReportedYaw();
+	CurveTargetKDegPerCm = targetKDegPerCm;
+	CurveFeedForwardSteerDeg = CurveFeedForwardSteerFromK(targetKDegPerCm);
+	directionScale = (is_up == -1) ? -1.0f : 1.0f;
+	SetSteeringAngle(ACKERMANN_CENTER_DEG + directionScale * CurveFeedForwardSteerDeg);
+	ApplyAckermannSpeedScale(Angle);
+	Odometry_Reset();
+	ActionStartTick = ControlTicks;
+	EnsureAutoSpeed();
+	ControlMode = CTRL_CURVE;
+	AutoStep = AUTO_IDLE;
+	OLED_StateAnim_ShowAction(AbsFloat(CurveFeedForwardSteerDeg) < ACKERMANN_MIN_STEER_DEG ?
+	                          MotionActionFromDirection() : ArcActionFromSteering(Angle),
+	                          ControlTicks);
+	return 1;
+}
+
 uint8_t StartAutoRoute(void)
 {
 	SetRunState(PARKING);
@@ -513,6 +574,41 @@ static uint8_t UpdateYawTurn(void)
 	return 0;
 }
 
+static uint8_t UpdateCurveDrive(void)
+{
+	Odometry_t snapshot;
+	float targetYaw;
+	float error;
+	float correction;
+	float directionScale;
+	float steerOffset;
+
+	if(TargetDistanceCm <= 0.0f)
+	{
+		return 1;
+	}
+
+	Odometry_GetSnapshot(&snapshot);
+	if((TargetDistanceCm - snapshot.distance) <= DISTANCE_DONE_CM)
+	{
+		return 1;
+	}
+
+	targetYaw = NormalizeYaw(CurveStartYawDeg + CurveTargetKDegPerCm * snapshot.distance);
+	error = GetYawError(targetYaw, GetReportedYaw());
+	if(AbsFloat(error) < headingPID.Deadband)
+	{
+		error = 0.0f;
+	}
+	correction = ClampFloat(error * TURN_SERVO_KP, -TURN_SERVO_MAX_OFFSET, TURN_SERVO_MAX_OFFSET);
+	directionScale = (is_up == -1) ? -1.0f : 1.0f;
+	steerOffset = directionScale * (CurveFeedForwardSteerDeg + correction);
+	SetSteeringAngle(ACKERMANN_CENTER_DEG + steerOffset);
+	ApplyAckermannSpeedScale(Angle);
+	EnsureAutoSpeed();
+	return 0;
+}
+
 void UpdateControlTask(void)
 {
 	if((ControlMode == CTRL_MANUAL || ControlMode == CTRL_STRAIGHT) &&
@@ -524,7 +620,7 @@ void UpdateControlTask(void)
 		return;
 	}
 
-	if((ControlMode == CTRL_DISTANCE || ControlMode == CTRL_ARC ||
+	if((ControlMode == CTRL_DISTANCE || ControlMode == CTRL_ARC || ControlMode == CTRL_CURVE ||
 	   (ControlMode == CTRL_AUTO_ROUTE && (AutoStep == AUTO_FORWARD1 || AutoStep == AUTO_FORWARD2))) &&
 	   (uint32_t)(ControlTicks - ActionStartTick) > DISTANCE_TIMEOUT_MS)
 	{
@@ -550,7 +646,7 @@ void UpdateControlTask(void)
 		return;
 	}
 
-	if((ControlMode == CTRL_TURN_YAW ||
+	if((ControlMode == CTRL_TURN_YAW || ControlMode == CTRL_CURVE ||
 	   (ControlMode == CTRL_AUTO_ROUTE && AutoStep == AUTO_TURN1)) &&
 	   BMI270_IsFault())
 	{
@@ -580,6 +676,14 @@ void UpdateControlTask(void)
 			{
 				USART3_printf("Arc done\r\n");
 			}
+			CarProtocol_FinishActiveMotionOk("");
+		}
+	}
+	else if(ControlMode == CTRL_CURVE)
+	{
+		if(UpdateCurveDrive())
+		{
+			SetStandbyMode();
 			CarProtocol_FinishActiveMotionOk("");
 		}
 	}

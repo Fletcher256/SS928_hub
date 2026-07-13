@@ -37,16 +37,16 @@ SECTIONS
     _etext = .;
   } > FLASH
 
-  _sidata = LOADADDR(.data);
-
-  .data : AT (_etext)
+  .data :
   {
     . = ALIGN(4);
     _sdata = .;
     *(.data*)
     . = ALIGN(4);
     _edata = .;
-  } > RAM
+  } > RAM AT> FLASH
+
+  _sidata = LOADADDR(.data);
 
   .bss :
   {

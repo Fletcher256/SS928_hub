@@ -75,6 +75,7 @@ void PrepareStraightHold(void);
 uint8_t StartDistanceDrive(float distanceCm);
 uint8_t StartYawTurn(float relativeYawDeg);
 uint8_t StartArcDrive(float distanceCm, float steerDeg);
+uint8_t StartCurveDrive(float distanceCm, float targetKDegPerCm);
 uint8_t StartAutoRoute(void);
 void UpdateControlTask(void);
 

@@ -429,10 +429,14 @@ static uint8_t IsV2CommandName(const char *token)
 	        strcmp(token, "MOVE") == 0 ||
 	        strcmp(token, "TURN") == 0 ||
 	        strcmp(token, "ARC") == 0 ||
+	        strcmp(token, "CURVE") == 0 ||
+	        strcmp(token, "ARC_K") == 0 ||
+	        strcmp(token, "KARC") == 0 ||
 	        strcmp(token, "AUTO") == 0 ||
 	        strcmp(token, "ST_PK") == 0 ||
 	        strcmp(token, "ST_ER") == 0 ||
 	        strcmp(token, "ST_SB") == 0 ||
+	        strcmp(token, "LED_BLINK") == 0 ||
 	        strcmp(token, "ZERO_ODOM") == 0 ||
 	        strcmp(token, "ZERO_YAW") == 0 ||
 	        strcmp(token, "ZERO_ALL") == 0 ||
@@ -635,6 +639,30 @@ static void HandleV2Arc(char *tokens[], uint8_t count, uint16_t seq)
 	FinishProtocolMotion(StartArcDrive(distance, steer), seq, "ARC", "BAD_ARG");
 }
 
+static void HandleV2Curve(char *tokens[], uint8_t count, uint16_t seq, const char *cmd)
+{
+	float distance;
+	float targetK;
+	uint8_t speed;
+
+	if(!CommandParser_GetFloatArg(tokens, count, "D", &distance) ||
+	   !CommandParser_GetFloatArg(tokens, count, "K", &targetK) ||
+	   !GetSpeedArg(tokens, count, &speed))
+	{
+		ReplyErr(seq, "BAD_ARG");
+		return;
+	}
+
+	if(BMI270_IsFault())
+	{
+		ReplyErr(seq, "IMU_FAULT");
+		return;
+	}
+
+	BeginProtocolMotion(speed);
+	FinishProtocolMotion(StartCurveDrive(distance, targetK), seq, cmd, "BAD_ARG");
+}
+
 static void HandleV2Auto(uint16_t seq)
 {
 	BeginProtocolMotion(AUTO_DEFAULT_SPEED);
@@ -785,6 +813,10 @@ static uint8_t HandleV2Command(char *pBuffer)
 	{
 		HandleV2Arc(tokens, count, seq);
 	}
+	else if(strcmp(cmd, "CURVE") == 0 || strcmp(cmd, "ARC_K") == 0 || strcmp(cmd, "KARC") == 0)
+	{
+		HandleV2Curve(tokens, count, seq, cmd);
+	}
 	else if(strcmp(cmd, "AUTO") == 0)
 	{
 		HandleV2Auto(seq);
@@ -811,6 +843,24 @@ static uint8_t HandleV2Command(char *pBuffer)
 		LED_SetState(LED_STATE_RED);
 		CarProtocol_FinishActiveMotionErr("CANCELED");
 		ReplyDone(seq, "ST_ER", "");
+	}
+	else if(strcmp(cmd, "LED_BLINK") == 0)
+	{
+		const char *mode = (cmdIndex + 1U < count) ? tokens[cmdIndex + 1U] : 0;
+		if(mode != 0 && (strcmp(mode, "ON") == 0 || strcmp(mode, "1") == 0))
+		{
+			LED_SetBlink(1U);
+			ReplyDone(seq, "LED_BLINK", "STATE=ON");
+		}
+		else if(mode != 0 && (strcmp(mode, "OFF") == 0 || strcmp(mode, "0") == 0))
+		{
+			LED_SetBlink(0U);
+			ReplyDone(seq, "LED_BLINK", "STATE=OFF");
+		}
+		else
+		{
+			ReplyErr(seq, "BAD_ARG");
+		}
 	}
 	else if(strcmp(cmd, "ZERO_ODOM") == 0 || strcmp(cmd, "ZERO_YAW") == 0 || strcmp(cmd, "ZERO_ALL") == 0)
 	{

@@ -199,6 +199,7 @@ void SysTick_Handler(void)
 {
 	ControlTicks++;
 	DataCaptureKey_SysTick();
+	LED_BlinkService1ms();
 	//GetALLData(&MD);
 	//CalEulerAngleHandler(&MD);
 	//ComplementaryFilter(&MD);

@@ -18,9 +18,10 @@ New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 $CommonFlags = @(
   '-mcpu=cortex-m3',
   '-mthumb',
-  '-O2',
+  '-Os',
   '-ffunction-sections',
   '-fdata-sections',
+  '-flto',
   '-fno-common',
   '-Wall',
   '-Wno-unused-variable',

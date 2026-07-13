@@ -4,6 +4,12 @@
 
 LED_STATE CurrentLedState = LED_STATE_GREEN;
 
+#define LED_BLINK_HALF_PERIOD_MS 400U
+
+static uint8_t LedBlinkEnabled = 0U;
+static uint8_t LedBlinkOnPhase = 1U;
+static uint16_t LedBlinkElapsedMs = 0U;
+
 void LED_Init()
 {
 	//APB2外设挂载的GPIO1口的RCC时钟使能端:开启。之后这个IO口就使用这个时钟信号来对IO口进行控制。
@@ -69,26 +75,70 @@ static void SetLEDs(uint16_t GPIO_Pin)
 	
 }
 
+static void SetAllLEDsOff(void)
+{
+	/* LEDs are active-low on PB12/PB13/PB14. */
+	SetLED(GPIO_Pin_12, 1);
+	SetLED(GPIO_Pin_13, 1);
+	SetLED(GPIO_Pin_14, 1);
+}
+
+static void ApplyCurrentLedOutput(void)
+{
+	if(LedBlinkEnabled && !LedBlinkOnPhase)
+	{
+		SetAllLEDsOff();
+		return;
+	}
+
+	switch(CurrentLedState)
+	{
+		case LED_STATE_YELLOW:
+			SetLEDs(GPIO_Pin_12);
+			break;
+		case LED_STATE_RED:
+			SetLEDs(GPIO_Pin_13);
+			break;
+		case LED_STATE_GREEN:
+		default:
+			SetLEDs(GPIO_Pin_14);
+			break;
+	}
+}
+
 void LED_SetState(LED_STATE state)
 {
 	CurrentLedState = state;
-	switch(state)
+	ApplyCurrentLedOutput();
+}
+
+void LED_SetBlink(uint8_t enabled)
+{
+	LedBlinkEnabled = enabled ? 1U : 0U;
+	LedBlinkOnPhase = 1U;
+	LedBlinkElapsedMs = 0U;
+	ApplyCurrentLedOutput();
+}
+
+uint8_t LED_IsBlinking(void)
+{
+	return LedBlinkEnabled;
+}
+
+void LED_BlinkService1ms(void)
+{
+	if(!LedBlinkEnabled)
 	{
-		case LED_STATE_YELLOW:
-		{
-			SetLEDs(GPIO_Pin_12);
-			break;
-		}
-		case LED_STATE_RED:
-		{
-			SetLEDs(GPIO_Pin_13);
-			break;
-		}
-		case LED_STATE_GREEN:
-		default:
-		{
-			SetLEDs(GPIO_Pin_14);
-			break;
-		}
+		return;
+	}
+	if(LedBlinkElapsedMs < LED_BLINK_HALF_PERIOD_MS)
+	{
+		LedBlinkElapsedMs++;
+	}
+	if(LedBlinkElapsedMs >= LED_BLINK_HALF_PERIOD_MS)
+	{
+		LedBlinkElapsedMs = 0U;
+		LedBlinkOnPhase = LedBlinkOnPhase ? 0U : 1U;
+		ApplyCurrentLedOutput();
 	}
 }

@@ -1,12 +1,21 @@
 #include "stm32f10x.h"
-#include "CarControl.h"
+#include "USART.h"
 #include "key.h"
 
 #define DATA_CAPTURE_KEY_PORT GPIOA
 #define DATA_CAPTURE_KEY_PIN  GPIO_Pin_3
 #define DATA_CAPTURE_KEY_DEBOUNCE_MS 30U
+#define DATA_CAPTURE_KEY_LONG_PRESS_MS 2000U
 
-static volatile uint8_t DataCaptureKeyPending = 0;
+typedef enum DataCaptureKeyEvent
+{
+	DATA_CAPTURE_KEY_EVENT_NONE = 0,
+	DATA_CAPTURE_KEY_EVENT_SHORT,
+	DATA_CAPTURE_KEY_EVENT_LONG
+} DataCaptureKeyEvent_t;
+
+static volatile DataCaptureKeyEvent_t DataCaptureKeyPending = DATA_CAPTURE_KEY_EVENT_NONE;
+static volatile uint16_t DataCaptureKeyDurationMs = 0U;
 
 void DataCaptureKey_Init(void)
 {
@@ -22,29 +31,41 @@ void DataCaptureKey_Init(void)
 
 void DataCaptureKey_SysTick(void)
 {
-	static uint8_t debounceActive = 0;
-	static uint8_t pressedLatched = 0;
-	static uint8_t debounceCount = 0;
+	static uint8_t stablePressed = 0U;
+	static uint8_t debounceCount = 0U;
+	static uint16_t pressedDurationMs = 0U;
 	uint8_t rawPressed;
 
 	rawPressed = (GPIO_ReadInputDataBit(DATA_CAPTURE_KEY_PORT, DATA_CAPTURE_KEY_PIN) == Bit_RESET) ? 1U : 0U;
-	if(!rawPressed)
+	if(rawPressed)
 	{
-		debounceActive = 0;
-		debounceCount = 0;
-		pressedLatched = 0;
+		if(pressedDurationMs < 0xFFFFU)
+		{
+			pressedDurationMs++;
+		}
+		if(!stablePressed)
+		{
+			if(debounceCount < DATA_CAPTURE_KEY_DEBOUNCE_MS)
+			{
+				debounceCount++;
+			}
+			if(debounceCount >= DATA_CAPTURE_KEY_DEBOUNCE_MS)
+			{
+				stablePressed = 1U;
+				debounceCount = 0U;
+			}
+		}
+		else
+		{
+			debounceCount = 0U;
+		}
 		return;
 	}
 
-	if(pressedLatched)
+	if(!stablePressed)
 	{
-		return;
-	}
-
-	if(!debounceActive)
-	{
-		debounceActive = 1;
-		debounceCount = 0;
+		debounceCount = 0U;
+		pressedDurationMs = 0U;
 		return;
 	}
 
@@ -54,23 +75,32 @@ void DataCaptureKey_SysTick(void)
 	}
 	if(debounceCount >= DATA_CAPTURE_KEY_DEBOUNCE_MS)
 	{
-		pressedLatched = 1;
-		debounceActive = 0;
-		DataCaptureKeyPending = 1;
+		DataCaptureKeyDurationMs = pressedDurationMs;
+		DataCaptureKeyPending = (pressedDurationMs >= DATA_CAPTURE_KEY_LONG_PRESS_MS) ?
+			DATA_CAPTURE_KEY_EVENT_LONG : DATA_CAPTURE_KEY_EVENT_SHORT;
+		stablePressed = 0U;
+		debounceCount = 0U;
+		pressedDurationMs = 0U;
 	}
 }
 
 void DataCaptureKey_Service(void)
 {
-	uint8_t pending;
+	DataCaptureKeyEvent_t pending;
+	uint16_t durationMs;
 
 	__disable_irq();
 	pending = DataCaptureKeyPending;
-	DataCaptureKeyPending = 0;
+	durationMs = DataCaptureKeyDurationMs;
+	DataCaptureKeyPending = DATA_CAPTURE_KEY_EVENT_NONE;
 	__enable_irq();
 
-	if(pending)
+	if(pending == DATA_CAPTURE_KEY_EVENT_SHORT)
 	{
-		PrintTelemetry();
+		USART3_printf("CTR_PK SHORT DUR_MS=%u\r\n", durationMs);
+	}
+	else if(pending == DATA_CAPTURE_KEY_EVENT_LONG)
+	{
+		USART3_printf("CTR_REC LONG DUR_MS=%u\r\n", durationMs);
 	}
 }
