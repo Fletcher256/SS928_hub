@@ -809,7 +809,7 @@ Build result:
 ```text
 powershell -ExecutionPolicy Bypass -File build_gcc/build.ps1
 passed
-FLASH 61228 B / 64 KB = 93.43%
+FLASH 61228 B / 64 KB = 93.43% (legacy STM32F103C8 capacity before STM32F103CB migration)
 RAM 4856 B / 20 KB = 23.71%
 outputs rebuilt:
   SS928_hub/build/gcc/SS928_hub.hex

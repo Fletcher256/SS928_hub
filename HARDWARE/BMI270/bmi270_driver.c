@@ -538,15 +538,16 @@ static int8_t BMI270_Get_Raw(BMI270 *this)
     gyro_y -= gyro_zero_y;
     gyro_z -= gyro_zero_z;
 
-    /* Map the new BMI270 Y axis to the old IMU / vehicle coordinate frame.
-     * Keep Z unchanged so yaw remains CCW-positive. */
+    /* Map the new BMI270 axes to the old IMU / vehicle coordinate frame. */
     acc_y = -acc_y;
-    gyro_y = -gyro_y;
+    gyro_z = -gyro_z;
 
     if (acc_y > 32767) acc_y = 32767;
     if (acc_y < -32768) acc_y = -32768;
     if (gyro_y > 32767) gyro_y = 32767;
     if (gyro_y < -32768) gyro_y = -32768;
+    if (gyro_z > 32767) gyro_z = 32767;
+    if (gyro_z < -32768) gyro_z = -32768;
 
     this->AccX  = (int16_t)acc_x;
     this->AccY  = (int16_t)acc_y;

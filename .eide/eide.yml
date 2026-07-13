@@ -1,7 +1,7 @@
 version: "4.1"
 name: Car_v1
 type: ARM
-deviceName: STM32F103C8
+deviceName: STM32F103CB
 packDir: .pack/Keil/STM32F1xx_DFP.2.4.1
 srcDirs: []
 virtualFolder:
@@ -100,8 +100,8 @@ targets:
   Debug:
     cppPreprocessAttrs:
       defineList:
-        - STM32F10X_MD
         - USE_STDPERIPH_DRIVER
+        - STM32F10X_MD
       incList:
         - .
         - HARDWARE

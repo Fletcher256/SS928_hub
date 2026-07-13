@@ -1,6 +1,6 @@
 # SS928_hub
 
-STM32F103 remote/autonomous car firmware.
+STM32F103CB remote/autonomous car firmware.
 
 ## Build
 

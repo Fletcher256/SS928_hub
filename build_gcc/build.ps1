@@ -113,7 +113,7 @@ try {
   $Map = Join-Path $BuildDir 'SS928_hub.map'
 
   & $CC @CommonFlags $Objects `
-    '-Tbuild_gcc/stm32f103c8.ld' `
+    '-Tbuild_gcc/stm32f103cb.ld' `
     '-Wl,--gc-sections' `
     "-Wl,-Map=$Map" `
     '-Wl,--print-memory-usage' `
