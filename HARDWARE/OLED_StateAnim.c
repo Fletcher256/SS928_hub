@@ -1,13 +1,25 @@
 #include "OLED_StateAnim.h"
 #include "OLED.h"
 
-#define OLED_LABEL_LINE 4U
+#define OLED_LABEL_LINE                    4U
+#define OLED_STATUS_LABEL_CHARS             12U
+#define OLED_CONFIDENCE_COLUMN              13U
+#define OLED_DETECT_TIMEOUT_MS              1000U
+#define OLED_CONFIDENCE_RENDER_INTERVAL_MS  200U
 
 typedef struct
 {
 	uint8_t ready;
-	OLED_ActionVisual_t currentAction;
+	OLED_ActionVisual_t requestedAction;
+	OLED_ActionVisual_t displayedAction;
 	RS currentState;
+	OLED_DetectState_t detectState;
+	uint8_t confidencePct;
+	uint8_t confidenceValid;
+	uint8_t renderedConfidencePct;
+	uint8_t renderedConfidenceValid;
+	uint32_t lastDetectTick;
+	uint32_t lastConfidenceRenderTick;
 } OLED_StateAnim_t;
 
 static OLED_StateAnim_t OledAnim;
@@ -185,8 +197,8 @@ static void DrawArrowRight(void)
 
 static void DrawLane(void)
 {
-	CanvasThickLine(30, 8, 18, 48);
-	CanvasThickLine(98, 8, 110, 48);
+	CanvasThickLine(30, 8, 18, 46);
+	CanvasThickLine(98, 8, 110, 46);
 }
 
 static void DrawArcLeft(void)
@@ -205,6 +217,26 @@ static void DrawArcRight(void)
 	CanvasFillRect(78, 12, 10, 9);
 	CanvasThickLine(86, 16, 74, 6);
 	CanvasThickLine(86, 16, 74, 28);
+}
+
+static void DrawReverseArcLeft(void)
+{
+	CanvasThickLine(80, 8, 66, 16);
+	CanvasThickLine(66, 16, 52, 28);
+	CanvasThickLine(52, 28, 44, 36);
+	CanvasFillRect(38, 34, 13, 8);
+	CanvasThickLine(40, 40, 30, 29);
+	CanvasThickLine(49, 40, 59, 29);
+}
+
+static void DrawReverseArcRight(void)
+{
+	CanvasThickLine(48, 8, 62, 16);
+	CanvasThickLine(62, 16, 76, 28);
+	CanvasThickLine(76, 28, 84, 36);
+	CanvasFillRect(78, 34, 13, 8);
+	CanvasThickLine(80, 40, 70, 29);
+	CanvasThickLine(89, 40, 99, 29);
 }
 
 static void DrawAutoRoute(void)
@@ -244,23 +276,16 @@ static void DrawReady(void)
 
 static void DrawError(void)
 {
-	CanvasRect(18, 6, 92, 44);
+	CanvasRect(18, 6, 92, 42);
 	CanvasThickLine(34, 14, 94, 42);
 	CanvasThickLine(94, 14, 34, 42);
 }
 
-static void ShowLabel(const char *label)
+static void DrawNoDetection(void)
 {
-	uint8_t len = 0;
-	uint8_t column;
-
-	while(label[len] != '\0' && len < 16U)
-	{
-		len++;
-	}
-	column = (uint8_t)((16U - len) / 2U + 1U);
-	OLED_ClearLine(OLED_LABEL_LINE);
-	OLED_ShowString(OLED_LABEL_LINE, column, (char *)label);
+	CanvasRect(24, 6, 80, 38);
+	CanvasThickLine(34, 13, 94, 37);
+	CanvasThickLine(94, 13, 34, 37);
 }
 
 static OLED_ActionVisual_t ActionFromState(RS state)
@@ -286,17 +311,136 @@ static const char *ActionLabel(OLED_ActionVisual_t action)
 	case OLED_ACTION_TURN_RIGHT: return "TURN RIGHT";
 	case OLED_ACTION_ARC_LEFT: return "ARC LEFT";
 	case OLED_ACTION_ARC_RIGHT: return "ARC RIGHT";
+	case OLED_ACTION_REVERSE_ARC_LEFT: return "REV ARC LEFT";
+	case OLED_ACTION_REVERSE_ARC_RIGHT: return "REV ARC R";
 	case OLED_ACTION_AUTO: return "AUTO";
 	case OLED_ACTION_PARKING: return "PARKING";
 	case OLED_ACTION_STOP: return "STOP";
+	case OLED_ACTION_NO_DETECTION: return "NO DETECT";
 	case OLED_ACTION_ERROR: return "ERROR";
 	default: return "UNKNOWN";
 	}
 }
 
-static void RenderAction(OLED_ActionVisual_t action)
+static uint8_t IsMotionAction(OLED_ActionVisual_t action)
 {
-	uint8_t showLabel = 1U;
+	switch(action)
+	{
+	case OLED_ACTION_FORWARD:
+	case OLED_ACTION_REVERSE:
+	case OLED_ACTION_STRAIGHT:
+	case OLED_ACTION_TURN_LEFT:
+	case OLED_ACTION_TURN_RIGHT:
+	case OLED_ACTION_ARC_LEFT:
+	case OLED_ACTION_ARC_RIGHT:
+	case OLED_ACTION_REVERSE_ARC_LEFT:
+	case OLED_ACTION_REVERSE_ARC_RIGHT:
+	case OLED_ACTION_AUTO:
+		return 1U;
+	default:
+		return 0U;
+	}
+}
+
+static OLED_ActionVisual_t ResolveDisplayAction(void)
+{
+	if(OledAnim.currentState == HITTED)
+	{
+		return OLED_ACTION_ERROR;
+	}
+
+	if(OledAnim.detectState == OLED_DETECT_MISSING)
+	{
+		return OLED_ACTION_NO_DETECTION;
+	}
+
+	if(IsMotionAction(OledAnim.requestedAction))
+	{
+		return OledAnim.requestedAction;
+	}
+
+	if(OledAnim.detectState == OLED_DETECT_PRESENT)
+	{
+		return OLED_ACTION_IDLE;
+	}
+
+	return ActionFromState(OledAnim.currentState);
+}
+
+static void FormatConfidence(char text[5])
+{
+	text[4] = '\0';
+	text[3] = '%';
+
+	if(!OledAnim.confidenceValid)
+	{
+		text[0] = ' ';
+		text[1] = '-';
+		text[2] = '-';
+		return;
+	}
+
+	if(OledAnim.confidencePct >= 100U)
+	{
+		text[0] = '1';
+		text[1] = '0';
+		text[2] = '0';
+		return;
+	}
+
+	text[0] = ' ';
+	if(OledAnim.confidencePct >= 10U)
+	{
+		text[1] = (char)('0' + OledAnim.confidencePct / 10U);
+	}
+	else
+	{
+		text[1] = ' ';
+	}
+	text[2] = (char)('0' + OledAnim.confidencePct % 10U);
+}
+
+static void RenderConfidenceRegion(uint32_t nowTicks)
+{
+	char confidenceText[5];
+
+	FormatConfidence(confidenceText);
+	OLED_ShowString(OLED_LABEL_LINE, OLED_CONFIDENCE_COLUMN, confidenceText);
+	OledAnim.renderedConfidencePct = OledAnim.confidencePct;
+	OledAnim.renderedConfidenceValid = OledAnim.confidenceValid;
+	OledAnim.lastConfidenceRenderTick = nowTicks;
+}
+
+static void ShowStatusLine(OLED_ActionVisual_t action, uint32_t nowTicks)
+{
+	const char *label = ActionLabel(action);
+	char labelText[OLED_STATUS_LABEL_CHARS + 1U];
+	uint8_t labelLength = 0U;
+	uint8_t labelStart;
+	uint8_t i;
+
+	for(i = 0U; i < OLED_STATUS_LABEL_CHARS; i++)
+	{
+		labelText[i] = ' ';
+	}
+	labelText[OLED_STATUS_LABEL_CHARS] = '\0';
+
+	while(label[labelLength] != '\0' && labelLength < OLED_STATUS_LABEL_CHARS)
+	{
+		labelLength++;
+	}
+	labelStart = (uint8_t)((OLED_STATUS_LABEL_CHARS - labelLength) / 2U);
+	for(i = 0U; i < labelLength; i++)
+	{
+		labelText[labelStart + i] = label[i];
+	}
+
+	OLED_ShowString(OLED_LABEL_LINE, 1U, labelText);
+	RenderConfidenceRegion(nowTicks);
+}
+
+static void RenderAction(OLED_ActionVisual_t action, uint32_t nowTicks)
+{
 
 	CanvasClear();
 
@@ -324,6 +468,12 @@ static void RenderAction(OLED_ActionVisual_t action)
 	case OLED_ACTION_ARC_RIGHT:
 		DrawArcRight();
 		break;
+	case OLED_ACTION_REVERSE_ARC_LEFT:
+		DrawReverseArcLeft();
+		break;
+	case OLED_ACTION_REVERSE_ARC_RIGHT:
+		DrawReverseArcRight();
+		break;
 	case OLED_ACTION_AUTO:
 		DrawAutoRoute();
 		break;
@@ -332,6 +482,9 @@ static void RenderAction(OLED_ActionVisual_t action)
 		break;
 	case OLED_ACTION_STOP:
 		DrawStop();
+		break;
+	case OLED_ACTION_NO_DETECTION:
+		DrawNoDetection();
 		break;
 	case OLED_ACTION_ERROR:
 		DrawError();
@@ -342,26 +495,66 @@ static void RenderAction(OLED_ActionVisual_t action)
 		break;
 	}
 
-	if(showLabel)
+	OLED_DrawBitmap128x64(OledCanvas);
+	ShowStatusLine(action, nowTicks);
+}
+
+static uint8_t ConfidenceRenderPending(void)
+{
+	if(OledAnim.renderedConfidenceValid != OledAnim.confidenceValid)
 	{
-		OLED_DrawBitmap128x64(OledCanvas);
-		ShowLabel(ActionLabel(action));
+		return 1U;
+	}
+
+	return OledAnim.confidenceValid &&
+	       OledAnim.renderedConfidencePct != OledAnim.confidencePct;
+}
+
+static void UpdateDisplay(uint32_t nowTicks, uint8_t forceFullRender)
+{
+	OLED_ActionVisual_t resolvedAction;
+
+	if(!OledAnim.ready)
+	{
+		return;
+	}
+
+	resolvedAction = ResolveDisplayAction();
+	if(forceFullRender || OledAnim.displayedAction != resolvedAction)
+	{
+		RenderAction(resolvedAction, nowTicks);
+		OledAnim.displayedAction = resolvedAction;
+		return;
+	}
+
+	if(ConfidenceRenderPending() &&
+	   (uint32_t)(nowTicks - OledAnim.lastConfidenceRenderTick) >=
+	       OLED_CONFIDENCE_RENDER_INTERVAL_MS)
+	{
+		RenderConfidenceRegion(nowTicks);
 	}
 }
 
 void OLED_StateAnim_Init(RS state)
 {
-	OledAnim.ready = 1U;
-	OledAnim.currentAction = OLED_ACTION_ERROR;
+	OledAnim.ready = 0U;
+	OledAnim.requestedAction = ActionFromState(state);
+	OledAnim.displayedAction = OLED_ACTION_ERROR;
 	OledAnim.currentState = state;
-	RenderAction(ActionFromState(state));
-	OledAnim.currentAction = ActionFromState(state);
+	OledAnim.detectState = OLED_DETECT_UNKNOWN;
+	OledAnim.confidencePct = 0U;
+	OledAnim.confidenceValid = 0U;
+	OledAnim.renderedConfidencePct = 0U;
+	OledAnim.renderedConfidenceValid = 0U;
+	OledAnim.lastDetectTick = 0U;
+	OledAnim.lastConfidenceRenderTick = 0U;
+	OledAnim.ready = 1U;
+	UpdateDisplay(0U, 1U);
 }
 
 void OLED_StateAnim_OnTransition(RS fromState, RS toState, uint32_t nowTicks)
 {
 	(void)fromState;
-	(void)nowTicks;
 
 	if(!OledAnim.ready)
 	{
@@ -374,23 +567,52 @@ void OLED_StateAnim_OnTransition(RS fromState, RS toState, uint32_t nowTicks)
 
 void OLED_StateAnim_ShowAction(OLED_ActionVisual_t action, uint32_t nowTicks)
 {
-	(void)nowTicks;
-
 	if(!OledAnim.ready)
 	{
 		return;
 	}
 
-	if(OledAnim.currentAction == action)
+	OledAnim.requestedAction = action;
+	UpdateDisplay(nowTicks, 0U);
+}
+
+void OLED_StateAnim_SetDetection(uint8_t detected, uint8_t confidencePct, uint32_t nowTicks)
+{
+	OLED_DetectState_t previousDetectState = OledAnim.detectState;
+
+	OledAnim.lastDetectTick = nowTicks;
+	if(detected)
 	{
-		return;
+		OledAnim.detectState = OLED_DETECT_PRESENT;
+		OledAnim.confidencePct = confidencePct > 100U ? 100U : confidencePct;
+		OledAnim.confidenceValid = 1U;
+	}
+	else
+	{
+		OledAnim.detectState = OLED_DETECT_MISSING;
+		OledAnim.confidencePct = 0U;
+		OledAnim.confidenceValid = 0U;
 	}
 
-	RenderAction(action);
-	OledAnim.currentAction = action;
+	UpdateDisplay(nowTicks, previousDetectState != OledAnim.detectState);
 }
 
 void OLED_StateAnim_Service(uint32_t nowTicks)
 {
-	(void)nowTicks;
+	if(!OledAnim.ready)
+	{
+		return;
+	}
+
+	if(OledAnim.detectState == OLED_DETECT_PRESENT &&
+	   (uint32_t)(nowTicks - OledAnim.lastDetectTick) >= OLED_DETECT_TIMEOUT_MS)
+	{
+		OledAnim.detectState = OLED_DETECT_MISSING;
+		OledAnim.confidencePct = 0U;
+		OledAnim.confidenceValid = 0U;
+		UpdateDisplay(nowTicks, 1U);
+		return;
+	}
+
+	UpdateDisplay(nowTicks, 0U);
 }

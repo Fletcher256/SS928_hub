@@ -204,6 +204,12 @@ static OLED_ActionVisual_t MotionActionFromDirection(void)
 
 static OLED_ActionVisual_t ArcActionFromSteering(float steerAngle)
 {
+	if(is_up < 0)
+	{
+		return steerAngle >= ACKERMANN_CENTER_DEG ?
+		       OLED_ACTION_REVERSE_ARC_LEFT : OLED_ACTION_REVERSE_ARC_RIGHT;
+	}
+
 	return steerAngle >= ACKERMANN_CENTER_DEG ? OLED_ACTION_ARC_LEFT : OLED_ACTION_ARC_RIGHT;
 }
 

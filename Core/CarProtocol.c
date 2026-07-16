@@ -3,6 +3,7 @@
 #include "CarControl.h"
 #include "CommandParser.h"
 #include "Motors.h"
+#include "OLED_StateAnim.h"
 #include "PWMO.h"
 #include "USART.h"
 #include "LED.h"
@@ -422,6 +423,7 @@ static uint8_t IsV2CommandName(const char *token)
 	        strcmp(token, "GDIAG") == 0 ||
 	        strcmp(token, "GYROCAL") == 0 ||
 	        strcmp(token, "TEL") == 0 ||
+	        strcmp(token, "DETECT") == 0 ||
 	        strcmp(token, "STOP") == 0 ||
 	        strcmp(token, "CANCEL") == 0 ||
 	        strcmp(token, "MODE") == 0 ||
@@ -522,6 +524,75 @@ static void HandleV2Telemetry(char *tokens[], uint8_t count, uint8_t cmdIndex, u
 	{
 		ReplyErr(seq, "BAD_ARG");
 	}
+}
+
+static void ReplyDetectBadArg(uint16_t seq)
+{
+	if(seq > 0U)
+	{
+		USART3_printf("ERR %u BAD_ARG\r\n", seq);
+	}
+	else
+	{
+		USART3_printf("ERR BAD_ARG\r\n");
+	}
+}
+
+static void ReplyDetectDone(uint16_t seq, uint8_t detected, uint8_t confidencePct)
+{
+	if(detected)
+	{
+		if(seq > 0U)
+		{
+			USART3_printf("DONE %u DETECT V=1 CONF=%u\r\n", seq, confidencePct);
+		}
+		else
+		{
+			USART3_printf("DONE DETECT V=1 CONF=%u\r\n", confidencePct);
+		}
+	}
+	else if(seq > 0U)
+	{
+		USART3_printf("DONE %u DETECT V=0\r\n", seq);
+	}
+	else
+	{
+		USART3_printf("DONE DETECT V=0\r\n");
+	}
+}
+
+static void HandleV2Detect(char *tokens[], uint8_t count, uint16_t seq)
+{
+	const char *detectedText = CommandParser_FindKeyValue(tokens, count, "V");
+	const char *confidenceText = CommandParser_FindKeyValue(tokens, count, "CONF");
+	uint16_t detectedValue;
+	uint16_t confidenceValue = 0U;
+
+	if(detectedText == 0 ||
+	   !CommandParser_ParseSeq(detectedText, &detectedValue) ||
+	   detectedValue > 1U)
+	{
+		ReplyDetectBadArg(seq);
+		return;
+	}
+
+	if(confidenceText != 0 &&
+	   (!CommandParser_ParseSeq(confidenceText, &confidenceValue) || confidenceValue > 100U))
+	{
+		ReplyDetectBadArg(seq);
+		return;
+	}
+
+	if(detectedValue == 1U && confidenceText == 0)
+	{
+		ReplyDetectBadArg(seq);
+		return;
+	}
+
+	OLED_StateAnim_SetDetection((uint8_t)detectedValue,
+	                            (uint8_t)confidenceValue,
+	                            ControlTicks);
+	ReplyDetectDone(seq, (uint8_t)detectedValue, (uint8_t)confidenceValue);
 }
 
 static void HandleV2GyroCal(uint16_t seq)
@@ -733,6 +804,7 @@ static uint8_t HandleV2Command(char *pBuffer)
 	uint8_t count;
 	uint8_t cmdIndex = 0;
 	uint16_t seq = 0;
+	uint8_t refreshCommandWatchdog = 1U;
 	const char *cmd;
 
 	count = CommandParser_Tokenize(pBuffer, tokens, 16);
@@ -786,6 +858,11 @@ static uint8_t HandleV2Command(char *pBuffer)
 	else if(strcmp(cmd, "TEL") == 0)
 	{
 		HandleV2Telemetry(tokens, count, cmdIndex, seq);
+	}
+	else if(strcmp(cmd, "DETECT") == 0)
+	{
+		HandleV2Detect(tokens, count, seq);
+		refreshCommandWatchdog = 0U;
 	}
 	else if(strcmp(cmd, "STOP") == 0 || strcmp(cmd, "CANCEL") == 0)
 	{
@@ -888,7 +965,10 @@ static uint8_t HandleV2Command(char *pBuffer)
 		ReplyErr(seq, "BAD_CMD");
 	}
 
-	RefreshCommandWatchdog();
+	if(refreshCommandWatchdog)
+	{
+		RefreshCommandWatchdog();
+	}
 	return 1;
 }
 
