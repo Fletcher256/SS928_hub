@@ -79,6 +79,12 @@ virtualFolder:
     - path: HARDWARE/claude_reverse.c
     - path: HARDWARE/OLED_StateAnim.c
     - path: HARDWARE/OLED_StateAnim.h
+    - path: HARDWARE/OpticalFlow_PMW3901.c
+    - path: HARDWARE/OpticalFlow_PMW3901.h
+    - path: HARDWARE/PMW3901_SoftSPI.c
+    - path: HARDWARE/PMW3901_SoftSPI.h
+    - path: Core/SensorFusion.c
+    - path: Core/SensorFusion.h
   folders:
     - name: libs
       files:
@@ -152,7 +158,7 @@ targets:
               isChecked: true
               isStartup: true
               mem:
-                size: "0x10000"
+                size: "0x20000"
                 startAddr: "0x08000000"
               tag: IROM
         useCustomScatterFile: false
@@ -195,7 +201,7 @@ targets:
               isChecked: true
               isStartup: true
               mem:
-                size: "0x10000"
+                size: "0x20000"
                 startAddr: "0x08000000"
               tag: IROM
         useCustomScatterFile: false

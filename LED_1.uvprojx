@@ -711,6 +711,16 @@
               <FilePath>.\Core\HeadingControl.h</FilePath>
             </File>
             <File>
+              <FileName>SensorFusion.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Core\SensorFusion.c</FilePath>
+            </File>
+            <File>
+              <FileName>SensorFusion.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Core\SensorFusion.h</FilePath>
+            </File>
+            <File>
               <FileName>stm32f10x_conf.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\USER\stm32f10x_conf.h</FilePath>
@@ -829,6 +839,26 @@
               <FileName>LED.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\HARDWARE\LED.h</FilePath>
+            </File>
+            <File>
+              <FileName>PMW3901_SoftSPI.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\HARDWARE\PMW3901_SoftSPI.c</FilePath>
+            </File>
+            <File>
+              <FileName>PMW3901_SoftSPI.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\HARDWARE\PMW3901_SoftSPI.h</FilePath>
+            </File>
+            <File>
+              <FileName>OpticalFlow_PMW3901.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\HARDWARE\OpticalFlow_PMW3901.c</FilePath>
+            </File>
+            <File>
+              <FileName>OpticalFlow_PMW3901.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\HARDWARE\OpticalFlow_PMW3901.h</FilePath>
             </File>
             <File>
               <FileName>YH8.c</FileName>

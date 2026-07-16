@@ -73,6 +73,7 @@ $Sources = @(
   'Core/CarProtocol.c',
   'Core/CommandParser.c',
   'Core/HeadingControl.c',
+  'Core/SensorFusion.c',
   'Core/Timers.c',
   'HARDWARE/PWMO.c',
   'HARDWARE/OLED.c',
@@ -88,6 +89,8 @@ $Sources = @(
   'HARDWARE/filter.c',
   'HARDWARE/generic.c',
   'HARDWARE/LED.c',
+  'HARDWARE/PMW3901_SoftSPI.c',
+  'HARDWARE/OpticalFlow_PMW3901.c',
   'build_gcc/syscalls.c'
 )
 

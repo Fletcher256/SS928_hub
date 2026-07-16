@@ -13,12 +13,18 @@
 #include "filter.h"
 #include "LED.h"
 #include "key.h"
+#include "OpticalFlow_PMW3901.h"
+#include "PMW3901_SoftSPI.h"
+#include "SensorFusion.h"
 
 static volatile uint16_t MpuTaskElapsedMs = 0;
 static volatile uint8_t StraightTaskReady = 0;
 static volatile uint8_t ServoTaskReady = 0;
+static volatile uint8_t OpticalFlowTaskReady = 0;
 
 #define IMU_MOVING_SPEED_EPS_CMS 0.01f
+#define SENSOR_FUSION_DIAG_ENABLE 0U
+#define SENSOR_FUSION_DIAG_DIV    50U
 
 // Main loop tasks -----------------------------------------------------------
 
@@ -105,6 +111,88 @@ static void ServiceServoTask(void)
 	}
 }
 
+static void ServiceOpticalFlowTask(void)
+{
+	SensorFusionInput_t input;
+#if SENSOR_FUSION_DIAG_ENABLE
+	SensorFusionOutput_t output;
+#endif
+	PMW3901_MotionBurst_t motion;
+	float flow_right_cm = 0.0f;
+	float flow_forward_cm = 0.0f;
+	float left_speed_cms;
+	float right_speed_cms;
+	uint32_t timestamp_ms;
+	static uint32_t lastTimestampMs = 0U;
+#if SENSOR_FUSION_DIAG_ENABLE
+	static uint8_t printDivider = 0;
+#endif
+
+	if(!TakeTaskFlag(&OpticalFlowTaskReady))
+	{
+		return;
+	}
+
+	timestamp_ms = ControlTicks;
+	input.timestamp_ms = timestamp_ms;
+	input.dt_s = (lastTimestampMs == 0U) ? 0.010f :
+	             (float)(uint32_t)(timestamp_ms - lastTimestampMs) * 0.001f;
+	lastTimestampMs = timestamp_ms;
+
+	__disable_irq();
+	left_speed_cms = lSpeed.Speed;
+	right_speed_cms = rSpeed.Speed;
+	__enable_irq();
+
+	input.left_speed_cms = left_speed_cms;
+	input.right_speed_cms = right_speed_cms;
+	input.flow_right_cm = 0.0f;
+	input.flow_forward_cm = 0.0f;
+	input.flow_height_cm = OpticalFlow_PMW3901_GetHeightCm();
+	input.flow_shutter = 0U;
+	input.flow_squal = 0U;
+	input.flow_motion = 0U;
+	input.flow_ready = 0U;
+	input.imu_yaw_deg = New_Yaw;
+	input.imu_gyro_z_rps = (float)MM.GyroZ * BMI270_GetGyroScale();
+	input.imu_valid = (BMI270_WasLastReadOk() && !BMI270_IsFault()) ? 1U : 0U;
+
+	if(OpticalFlow_PMW3901_ReadMotion(&motion) != 0U &&
+	   OpticalFlow_PMW3901_ConvertDeltaToCm(&motion, &flow_right_cm, &flow_forward_cm) != 0U)
+	{
+		input.flow_right_cm = flow_right_cm;
+		input.flow_forward_cm = flow_forward_cm;
+		input.flow_shutter = motion.shutter;
+		input.flow_squal = motion.squal;
+		input.flow_motion = motion.motion;
+		input.flow_ready = OpticalFlow_PMW3901_IsReady();
+	}
+
+	SensorFusion_Update(&input);
+
+#if SENSOR_FUSION_DIAG_ENABLE
+	printDivider++;
+	if(printDivider >= SENSOR_FUSION_DIAG_DIV)
+	{
+		printDivider = 0;
+		SensorFusion_GetOutput(&output);
+		USART3_printf("FUS DT=%.3f ENC_F=%.2f OF_R=%.2f OF_F=%.2f Q=%.2f W=%.2f FUSED_R=%.2f FUSED_F=%.2f X=%.2f Y=%.2f D=%.2f YAW=%.1f FLOW_VALID=%u FALLBACK=0x%02X FAULT=0x%04X\r\n",
+		              output.dt_s, output.encoder_forward_cms,
+		              output.flow_right_cms, output.flow_forward_cms,
+		              output.flow_quality, output.flow_weight, output.fused_right_cms,
+		              output.fused_forward_cms, output.x_cm, output.y_cm,
+		              output.distance_cm, output.yaw_deg, (unsigned int)output.flow_valid,
+		              (unsigned int)output.fallback_flags,
+		              (unsigned int)output.fault_flags);
+		USART3_printf("OFC OF_RAW_R=%.2f OF_RAW_F=%.2f OF_COMP_R=%.2f OF_COMP_F=%.2f OMEGA=%.3f MOUNT_X=%.1f MOUNT_Y=%.1f COMP_VALID=%u\r\n",
+		              output.raw_flow_right_cms, output.raw_flow_forward_cms,
+		              output.compensated_flow_right_cms, output.compensated_flow_forward_cms,
+		              output.compensation_omega_rps, output.flow_mount_x_cm,
+		              output.flow_mount_y_cm, (unsigned int)output.compensation_valid);
+	}
+#endif
+}
+
 
 void CarApp_Run(void)
 {
@@ -142,15 +230,32 @@ void CarApp_Run(void)
 	}
 	//aMPU6050_Init();
 	BMI270_init(GPIOB, GPIO_Pin_1, GPIO_Pin_0);
+	if(OpticalFlow_PMW3901_Init() != 0U)
+	{
+		USART3_printf("[PMW3901] OK ID=0x%02X INV=0x%02X SPI=SW PB8/PB9/PB15 CS=PA0\r\n",
+		              OpticalFlow_PMW3901_GetProductId(),
+		              OpticalFlow_PMW3901_GetInverseProductId());
+	}
+	else
+	{
+		USART3_printf("[PMW3901] FAIL ID=0x%02X INV=0x%02X MISO_IDLE=%u SPI=SW PB8/PB9/PB15 CS=PA0\r\n",
+		              OpticalFlow_PMW3901_GetProductId(),
+		              OpticalFlow_PMW3901_GetInverseProductId(),
+		              (unsigned int)PMW3901_SoftSPI_ReadMisoLevel());
+	}
 	//涔熶篃璁告垜浠渶瑕佸MPU6050杩涜涓€涓潤鎬佹牎鍑嗐€?
 	//MPU6050_Calibration();
 	//mpu_dmp_init(GPIOB,GPIO_Pin_1,GPIO_Pin_0);
 	MotorEnCoder_Init();
+	SensorFusion_Init(0);
+	USART3_printf("[FUSION] PARALLEL 10MS H=%.1fCM LEGACY_ODOM=ACTIVE\r\n",
+	              OpticalFlow_PMW3901_GetHeightCm());
 
 	//寮€濮嬩娇鑳界粰0,涓嶈兘婊¤冻涓?鏃堕棿瓒冲闀垮洜姝ゆ棤娉曡緭鍑恒€?
 	//鎵€浠T4950涔熼渶瑕佷竴涓垵濮嬪寲,灏辨槸涓婄數鍏堟妸瀹冨敜閱掋€傘€傘€?
 
 	SysTick_Init();
+
 	ServoPWM_Init();
 	SetSteeringAngle(STEERING_CENTER_DEG);
 
@@ -175,6 +280,7 @@ void CarApp_Run(void)
 		ServiceMpuTask();
 		ServiceStraightTask();
 		ServiceServoTask();
+		ServiceOpticalFlowTask();
 		OLED_StateAnim_Service(ControlTicks);
 		UpdateControlTask();
 		DataCaptureKey_Service();
@@ -209,6 +315,7 @@ void SysTick_Handler(void)
 	static uint16_t StraightCnt = 0;
 	static uint16_t ServoCnt = 0;
 	static uint16_t TelemetryCnt = 0;
+	static uint16_t OpticalFlowCnt = 0;
 
 	if(EXCOUNT(MPU6050Cnt,5) == 1)
 	{
@@ -218,6 +325,10 @@ void SysTick_Handler(void)
 		}
 
 		//杩欓噷鍋氫竴涓鍙栦涪鍖呮娴嬨€傚鏋滀竴涓暟鎹秴杩?娆℃病鏈変换浣曞彉鍖栭偅涔堣涓篗PU6050涓㈠寘,鐩存帴閲嶆柊璇诲彇銆?
+	}
+	if(EXCOUNT(OpticalFlowCnt,10) == 1)
+	{
+		OpticalFlowTaskReady = 1;
 	}
 	if(is_Switch)
 	{
